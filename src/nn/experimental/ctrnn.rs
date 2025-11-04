@@ -3,11 +3,9 @@ use ndarray::{Array1, Array2, Axis, Slice, concatenate};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 use crate::{
-    f::Activation,
+    f::{self, Activation},
     optim::param::{Param, ToParams},
 };
-
-// TODO implement full BPTT for tn -> tn+m, not just integrated last step
 
 pub struct CTRNN {
     size: usize,
@@ -145,7 +143,6 @@ impl CTRNN {
         let dt = self.step_dt[t];
         let x_prev = self.x_prev.row(t);
         let preactivation = self.preactivations.row(t);
-        let _activation = self.activations.row(t); // unused
         let dx_dt = self.dx_dt.row(t);
 
         let exp_taus = self.taus.exp();
@@ -172,16 +169,30 @@ impl CTRNN {
 
         let r_factor = &r / (1. + &r);
         let grad_scale = d_loss * &r_factor; // (S)
-        self.d_weights = grad_scale
+
+        let grad_w = grad_scale
             .clone()
             .insert_axis(Axis(1))
             .dot(&dx_dt.clone().insert_axis(Axis(0)));
+
+        if self.d_weights.len() == 0 {
+            self.d_weights = grad_w;
+        } else {
+            self.d_weights += &grad_w;
+        }
 
         // Differentiate loss w.r.t. B
 
         let d_biased =
             (self.d)(&preactivation.to_owned().insert_axis(Axis(0))).remove_axis(Axis(0));
-        self.d_biases = &self.weights.t().dot(&grad_scale) * d_biased;
+
+        let grad_b = &self.weights.t().dot(&grad_scale) * d_biased;
+
+        if self.d_biases.len() == 0 {
+            self.d_biases = grad_b;
+        } else {
+            self.d_biases += &grad_b;
+        }
     }
 
     pub fn backward(&mut self, d_loss: Array1<f64>) {
@@ -194,22 +205,59 @@ impl CTRNN {
             let d_t = &self.d_loss.row(t) + &d_state_next;
             self.backward_step(&d_t, t);
 
+            // find ∂x+1/∂x
+            // by taking partial derivative of update rule w.r.t. x.
+
             let dt = self.step_dt[t];
             let exp_taus = self.taus.exp();
             let smoothed_taus = self.tau_min + exp_taus;
             let r = dt / smoothed_taus;
 
+            let a = 1. / (1. + &r);
+            let b = &r / (1. + &r);
+
             // ∂x_{t+1}/∂x_t ≈ 1 - (dt/τ) + (dt/τ)*f'(x_t)
             // for small dt, often approximated as 1/(1 + r)
-            let jacobian = 1. / (1. + r);
-            d_state_next = d_t * jacobian;
+            // but we will be deriving the whole thing
+            //
+            // update rule is
+            // s+1 = a * s + b * ((W • sig(s + b)) + i)
+            // ∂W = W.T.dot()
+            // ∂s+1/∂s = a + b * (W.T • d_sig(s + b))
+
+            let d_sig =
+                f::d_sigmoid(&(&self.x_prev.row(t).view() + &self.biases).insert_axis(Axis(0)))
+                    .remove_axis(Axis(0)); // (S,)
+            let a_term = &a * &d_t; // (S,)
+            let b_term = &b * &d_t; // (S,)
+            let recurrent = b_term.dot(&self.weights); // (S,)
+            d_state_next = a_term + recurrent * &d_sig; // (S,)
+        }
+    }
+
+    pub fn retain_grads(&mut self, n: usize) {
+        if self.step_dt.len() < n {
+            return;
         }
 
-        self.step_dt = Vec::new();
-        self.x_prev = Array2::zeros((0, self.size));
-        self.preactivations = Array2::zeros((0, self.size));
-        self.activations = Array2::zeros((0, self.size));
-        self.dx_dt = Array2::zeros((0, self.size));
+        let slice_at = self.step_dt.len() - n;
+        self.step_dt = self.step_dt.split_off(slice_at);
+        self.x_prev = self
+            .x_prev
+            .slice_axis(Axis(0), Slice::from(slice_at..))
+            .to_owned();
+        self.preactivations = self
+            .preactivations
+            .slice_axis(Axis(0), Slice::from(slice_at..))
+            .to_owned();
+        self.activations = self
+            .activations
+            .slice_axis(Axis(0), Slice::from(slice_at..))
+            .to_owned();
+        self.dx_dt = self
+            .dx_dt
+            .slice_axis(Axis(0), Slice::from(slice_at..))
+            .to_owned();
     }
 
     pub fn zero_grads(&mut self) {

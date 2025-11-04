@@ -2,7 +2,7 @@ use ndarray::Array1;
 use prims::{
     envs::lorenz::lorenz_step,
     f,
-    nn::ctrnn::CTRNN,
+    nn::experimental::ctrnn::CTRNN,
     optim::{adam::AdamW, optimizer::Optimizer},
     util::plot_pair,
 };

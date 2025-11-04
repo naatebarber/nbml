@@ -2,7 +2,7 @@ use ndarray::Array1;
 use prims::{
     envs::lorenz::lorenz_step,
     f,
-    nn::vertlet_ctrnn::VertletCTRNN,
+    nn::experimental::vertlet_ctrnn::VertletCTRNN,
     optim::{adam::AdamW, optimizer::Optimizer},
 };
 use rand::{rng, seq::IndexedRandom};
