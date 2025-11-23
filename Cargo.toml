@@ -1,11 +1,11 @@
 [package]
-name = "prims"
+name = "nbml"
 version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/naatebarber/primitives"
 homepage = "https://github.com/naatebarber/primitives"
 license = "MIT OR Apache-2.0"
-description = "Machine learning primitives"
+description = "Machine Learning Primitives"
 readme = "README.md"
 
 [dependencies]

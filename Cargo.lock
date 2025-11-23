@@ -378,6 +378,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
+name = "nbml"
+version = "0.1.0"
+dependencies = [
+ "ndarray",
+ "ndarray-rand",
+ "ndarray-stats",
+ "plotly",
+ "rand 0.9.2",
+ "serde",
+]
+
+[[package]]
 name = "ndarray"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,18 +554,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
 dependencies = [
  "zerocopy",
-]
-
-[[package]]
-name = "prims"
-version = "0.1.0"
-dependencies = [
- "ndarray",
- "ndarray-rand",
- "ndarray-stats",
- "plotly",
- "rand 0.9.2",
- "serde",
 ]
 
 [[package]]
