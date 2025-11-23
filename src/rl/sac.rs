@@ -81,8 +81,8 @@ impl SAC {
         let q1_target = q1.clone();
         let q2_target = q2.clone();
 
-        let policy_mean_head = FFN::new(vec![(policy_last.1, n_action, f::ident, f::d_ident)]);
-        let policy_std_head = FFN::new(vec![(policy_last.1, n_action, f::ident, f::d_ident)]);
+        let policy_mean_head = FFN::new(vec![(policy_last.1, n_action, f::Activation::Identity)]);
+        let policy_std_head = FFN::new(vec![(policy_last.1, n_action, f::Activation::Identity)]);
         let policy = FFN::new(policy_hidden_layers);
 
         Self {

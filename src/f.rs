@@ -4,8 +4,12 @@ use ndarray::{Array1, Array2, Axis};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use ndarray_stats::QuantileExt;
 use rand::{Rng, rngs::ThreadRng};
+use serde::{Deserialize, Serialize};
 
-pub type Activation = fn(&Array2<f64>) -> Array2<f64>;
+pub type ActivationFn = fn(&Array2<f64>) -> Array2<f64>;
+pub type InitializationFn = fn((usize, usize)) -> Array2<f64>;
+
+// ACTIVATIONS
 
 pub fn relu(x: &Array2<f64>) -> Array2<f64> {
     x.mapv(|v| v.max(0.))
@@ -21,6 +25,14 @@ pub fn tanh(x: &Array2<f64>) -> Array2<f64> {
 
 pub fn d_tanh(x: &Array2<f64>) -> Array2<f64> {
     1. - (x.mapv(|v| v.tanh())).powi(2)
+}
+
+pub fn leaky_relu(x: &Array2<f64>) -> Array2<f64> {
+    x.mapv(|x| if x >= 0. { x } else { 0.01 * x })
+}
+
+pub fn d_leaky_relu(x: &Array2<f64>) -> Array2<f64> {
+    x.mapv(|x| if x >= 0. { 1. } else { 0.01 })
 }
 
 pub fn exp(x: &Array2<f64>) -> Array2<f64> {
@@ -56,8 +68,29 @@ pub fn d_sigmoid(x: &Array2<f64>) -> Array2<f64> {
     &s * &(1.0 - &s)
 }
 
+pub fn softmax(x: &Array2<f64>) -> Array2<f64> {
+    let maxes = x
+        .map_axis(Axis(1), |row| row.max().cloned().unwrap_or(1e-4))
+        .insert_axis(Axis(1));
+
+    let mut d = x - &maxes;
+
+    d.mapv_inplace(|x| x.exp());
+
+    let sums = d.map_axis(Axis(1), |row| row.sum()).insert_axis(Axis(1));
+
+    let last = &d / &sums;
+    return last;
+}
+
+pub fn d_softmax_cross_entropy(x: &Array2<f64>) -> Array2<f64> {
+    x.to_owned()
+}
+
+// ACTIVATIONS
+
 pub fn he(shape: (usize, usize)) -> Array2<f64> {
-    let bound = f64::sqrt(2.) / f64::sqrt(shape.0 as f64);
+    let bound = f64::sqrt(6.) / f64::sqrt(shape.0 as f64);
     return Array2::random(shape, Uniform::new(-bound, bound));
 }
 
@@ -69,20 +102,12 @@ pub fn xavier_normal(shape: (usize, usize)) -> Array2<f64> {
     )
 }
 
-pub fn softmax(x: Array2<f64>) -> Array2<f64> {
-    let maxes = x
-        .map_axis(Axis(1), |row| row.max().cloned().unwrap_or(1e-4))
-        .insert_axis(Axis(1));
-
-    let mut d = &x - &maxes;
-
-    d.mapv_inplace(|x| x.exp());
-
-    let sums = d.map_axis(Axis(1), |row| row.sum()).insert_axis(Axis(1));
-
-    let last = &d / &sums;
-    return last;
+pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
+    let bound = (6. / (shape.0 as f64 + shape.1 as f64)).sqrt();
+    return Array2::random(shape, Uniform::new(-bound, bound));
 }
+
+// MISC
 
 pub fn softmax_vector_jacobian_product(
     upstream: &Array2<f64>,
@@ -179,4 +204,33 @@ pub fn tanh_gaussian_correction(a_raw: &Array2<f64>) -> Array1<f64> {
 pub fn tanh_gaussian_correction_eps(a_raw: &Array2<f64>) -> Array1<f64> {
     let deriv = 1.0 - a_raw.mapv(|u| u.tanh().powi(2)); // d_tanh(u)
     deriv.mapv(|v| (v + 1e-8).ln()).sum_axis(Axis(1))
+}
+
+// ENUMS
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum Activation {
+    Relu,
+    LeakyRelu,
+    SoftmaxCrossEntropy,
+    Identity,
+    Exp,
+    Sigmoid,
+    Tanh,
+    Softplus,
+}
+
+impl Activation {
+    pub fn wake(&self) -> (ActivationFn, ActivationFn, InitializationFn) {
+        match self {
+            Self::Relu => (relu, d_relu, he),
+            Self::LeakyRelu => (leaky_relu, d_leaky_relu, he),
+            Self::SoftmaxCrossEntropy => (softmax, d_softmax_cross_entropy, xavier),
+            Self::Identity => (ident, d_ident, he),
+            Self::Exp => (exp, d_exp, he),
+            Self::Sigmoid => (sigmoid, d_sigmoid, he),
+            Self::Tanh => (tanh, d_tanh, he),
+            Self::Softplus => (softplus, d_softplus, he),
+        }
+    }
 }

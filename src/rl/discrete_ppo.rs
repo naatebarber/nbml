@@ -67,8 +67,8 @@ impl DiscretePPO {
         let d_policy_last = policy_layers.last().unwrap().1;
         let d_values_last = values_layers.last().unwrap().1;
 
-        let policy_final: LayerDef = (d_policy_last, d_action, f::ident, f::d_ident);
-        let values_final: LayerDef = (d_values_last, 1, f::ident, f::d_ident);
+        let policy_final: LayerDef = (d_policy_last, d_action, f::Activation::Identity);
+        let values_final: LayerDef = (d_values_last, 1, f::Activation::Identity);
 
         policy_layers.push(policy_final);
         values_layers.push(values_final);

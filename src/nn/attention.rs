@@ -127,7 +127,7 @@ impl AttentionHead {
 
             scores += &padding_mask_i.broadcast((seq_len, seq_len)).unwrap();
 
-            let weights = f::softmax(scores); // (S, S)
+            let weights = f::softmax(&scores); // (S, S)
             let attention = weights.dot(&v_i); // (S, dH)
 
             b_scores.index_axis_mut(Axis(0), i).assign(&weights);

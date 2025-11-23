@@ -41,8 +41,8 @@ impl PPO {
         let policy_last_layer = policy_hidden
             .last()
             .expect("Policy network needs at least one hidden layer.");
-        let policy_mean_head = Layer::new(policy_last_layer.1, d_action, f::ident, f::d_ident);
-        let policy_logstd_head = Layer::new(policy_last_layer.1, d_action, f::ident, f::d_ident);
+        let policy_mean_head = Layer::new(policy_last_layer.1, d_action, f::Activation::Identity);
+        let policy_logstd_head = Layer::new(policy_last_layer.1, d_action, f::Activation::Identity);
         let policy = FFN::new(policy_hidden);
 
         PPO {

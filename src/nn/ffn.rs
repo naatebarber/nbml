@@ -5,7 +5,7 @@ use crate::{
     optim::param::{Param, ToParams},
 };
 
-pub type LayerDef = (usize, usize, f::Activation, f::Activation);
+pub type LayerDef = (usize, usize, f::Activation);
 
 #[derive(Debug, Clone)]
 pub struct Layer {
@@ -13,7 +13,6 @@ pub struct Layer {
     pub b: Array1<f64>,
 
     pub activation: f::Activation,
-    pub d_activation: f::Activation,
 
     pub x: Array2<f64>,
     pub z: Array2<f64>,
@@ -23,17 +22,11 @@ pub struct Layer {
 }
 
 impl Layer {
-    pub fn new(
-        d_in: usize,
-        d_out: usize,
-        activation: f::Activation,
-        d_activation: f::Activation,
-    ) -> Layer {
+    pub fn new(d_in: usize, d_out: usize, activation: f::Activation) -> Layer {
         Layer {
             w: f::he((d_in, d_out)),
             b: Array1::zeros(d_out),
             activation,
-            d_activation,
 
             x: Array2::zeros((0, 0)),
             z: Array2::zeros((0, 0)),
@@ -51,11 +44,11 @@ impl Layer {
             self.z = z.clone();
         }
 
-        (self.activation)(&z)
+        (self.activation.wake().0)(&z)
     }
 
     pub fn backward(&mut self, d_a: Array2<f64>) -> Array2<f64> {
-        let d_z = d_a * &(self.d_activation)(&self.z);
+        let d_z = d_a * &(self.activation.wake().1)(&self.z);
         self.d_w = self.x.t().dot(&d_z);
         self.d_b = d_z.sum_axis(Axis(0));
 
@@ -82,7 +75,7 @@ impl FFN {
         FFN {
             layers: layers
                 .into_iter()
-                .map(|(d_in, d_out, a, d_a)| Layer::new(d_in, d_out, a, d_a))
+                .map(|(d_in, d_out, a)| Layer::new(d_in, d_out, a))
                 .collect(),
         }
     }
