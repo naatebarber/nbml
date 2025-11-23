@@ -24,7 +24,7 @@ pub struct Layer {
 impl Layer {
     pub fn new(d_in: usize, d_out: usize, activation: f::Activation) -> Layer {
         Layer {
-            w: f::he((d_in, d_out)),
+            w: activation.wake().2((d_in, d_out)),
             b: Array1::zeros(d_out),
             activation,
 
