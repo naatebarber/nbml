@@ -2,7 +2,7 @@
 
 Whenever I go to use a new machine learning algorithm / architecture / technique, I normally write it out myself first using plain Rust and NDArray. 
 Doing all the differentiation and grunt work helps me appreciate this stuff more, and I like that nothing is hidden. I figured I would collect these 
-handwritten architectures as I go. This is not at all a library, but moreso a set of primitives / a toolbox I'll be revisiting from time to time.
+handwritten architectures as I go, into a kind of mini-framework / primitives set.
 
 ### Sections
 - `envs`: Various simulators used to test stuff
