@@ -1,4 +1,5 @@
 use ndarray::{Array1, Array2, Axis};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
@@ -7,7 +8,7 @@ use crate::{
 
 pub type LayerDef = (usize, usize, f::Activation);
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Layer {
     pub w: Array2<f64>,
     pub b: Array1<f64>,
@@ -65,7 +66,7 @@ impl ToParams for Layer {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct FFN {
     pub layers: Vec<Layer>,
 }

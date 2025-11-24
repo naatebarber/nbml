@@ -1,4 +1,5 @@
 use ndarray::Array3;
+use serde::{Deserialize, Serialize};
 
 use crate::optim::param::ToParams;
 
@@ -7,7 +8,7 @@ use super::ffn::{FFN, LayerDef};
 use super::layernorm::LayerNorm;
 use super::pad_mask::PadMask;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transformer {
     pub d_in: usize,
     pub head: AttentionHead,
