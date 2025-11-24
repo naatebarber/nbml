@@ -60,8 +60,8 @@ impl Layer {
 impl ToParams for Layer {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
         vec![
-            Param::from_array2(&mut self.w, &mut self.d_w),
-            Param::from_array1(&mut self.b, &mut self.d_b),
+            Param::matrix(&mut self.w).with_matrix_grad(&mut self.d_w),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
         ]
     }
 }

@@ -310,10 +310,7 @@ impl ToParams for SAC {
         params.append(&mut self.policy.params());
         params.append(&mut self.policy_mean_head.params());
         params.append(&mut self.policy_std_head.params());
-        params.push(Param::from_scalars(
-            &mut self.log_alpha,
-            &mut self.d_log_alpha,
-        ));
+        params.push(Param::scalar(&mut self.log_alpha).with_scalar_grad(&mut self.d_log_alpha));
 
         params
     }

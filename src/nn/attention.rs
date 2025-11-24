@@ -236,13 +236,11 @@ impl AttentionHead {
 
 impl ToParams for AttentionHead {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
-        let mut params = vec![];
-
-        params.push(Param::from_array2(&mut self.qkv_w, &mut self.d_qkv_w));
-        params.push(Param::from_array1(&mut self.qkv_b, &mut self.d_qkv_b));
-        params.push(Param::from_array2(&mut self.o_w, &mut self.d_o_w));
-        params.push(Param::from_array1(&mut self.o_b, &mut self.d_o_b));
-
-        params
+        vec![
+            Param::matrix(&mut self.qkv_w).with_matrix_grad(&mut self.d_qkv_w),
+            Param::vector(&mut self.qkv_b).with_vector_grad(&mut self.d_qkv_b),
+            Param::matrix(&mut self.o_w).with_matrix_grad(&mut self.d_o_w),
+            Param::vector(&mut self.o_b).with_vector_grad(&mut self.d_o_b),
+        ]
     }
 }

@@ -123,11 +123,11 @@ impl Recurrent {
 
 impl ToParams for Recurrent {
     fn params(&mut self) -> Vec<Param> {
-        let mut params = vec![];
-        params.push(Param::from_array2(&mut self.w_i, &mut self.d_wi));
-        params.push(Param::from_array2(&mut self.w_r, &mut self.d_wr));
-        params.push(Param::from_array1(&mut self.b, &mut self.d_b));
-        params
+        vec![
+            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.d_wi),
+            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.d_wr),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+        ]
     }
 }
 

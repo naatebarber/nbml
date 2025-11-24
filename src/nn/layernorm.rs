@@ -98,11 +98,12 @@ impl LayerNorm {
 
 impl ToParams for LayerNorm {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
-        let mut params = vec![];
+        let mut gamma_p = Param::matrix(&mut self.gamma).with_matrix_grad(&mut self.d_gamma);
+        gamma_p.enable_weight_decay = false;
 
-        params.push(Param::from_array2(&mut self.gamma, &mut self.d_gamma));
-        params.push(Param::from_array1(&mut self.beta, &mut self.d_beta));
-
-        params
+        vec![
+            gamma_p,
+            Param::vector(&mut self.beta).with_vector_grad(&mut self.d_beta),
+        ]
     }
 }

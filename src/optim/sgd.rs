@@ -1,6 +1,6 @@
 use super::{
     optimizer::Optimizer,
-    param::{Param, ToParams},
+    param::{ParamValue, ToParams},
 };
 
 #[derive(Debug, Clone)]
@@ -24,16 +24,17 @@ impl Optimizer for SGD {
     fn step(&mut self, optimizable: &mut impl ToParams) {
         unsafe {
             for param in optimizable.params().into_iter() {
-                match param {
-                    Param::Scalar { target, grad } => {
+                match (param.target, param.grad) {
+                    (ParamValue::Scalar(target), ParamValue::Scalar(grad)) => {
                         *target -= *grad * self.learning_rate;
                     }
-                    Param::Vector { target, grad } => {
+                    (ParamValue::Vector(target), ParamValue::Vector(grad)) => {
                         *target -= &(&(*grad) * self.learning_rate);
                     }
-                    Param::Matrix { target, grad } => {
+                    (ParamValue::Matrix(target), ParamValue::Matrix(grad)) => {
                         *target -= &(&(*grad) * self.learning_rate);
                     }
+                    _ => (),
                 }
             }
         }
