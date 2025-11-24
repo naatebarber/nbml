@@ -32,8 +32,8 @@ impl Layer {
             x: Array2::zeros((0, 0)),
             z: Array2::zeros((0, 0)),
 
-            d_w: Array2::zeros((d_in, d_out)),
-            d_b: Array1::zeros(d_out),
+            d_w: Array2::zeros((0, 0)),
+            d_b: Array1::zeros(0),
         }
     }
 

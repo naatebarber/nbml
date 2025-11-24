@@ -49,9 +49,9 @@ impl Closure {
         }
     }
 
-    pub fn forward(&mut self, state: Array2<f64>) -> Array2<f64> {
-        self.target = self.c.forward(state, true);
-        self.r.forward(self.target.clone(), true)
+    pub fn forward(&mut self, state: Array2<f64>, grad: bool) -> Array2<f64> {
+        self.target = self.c.forward(state, grad);
+        self.r.forward(self.target.clone(), grad)
     }
 
     pub fn backward(&mut self, d_loss: Array2<f64>) -> Array2<f64> {
@@ -101,16 +101,16 @@ impl Recurrent {
             w_r: f::xavier_normal((size, size)),
             b: Array1::zeros(size),
 
-            _input: Array2::zeros((1, size)),
-            _states: Array2::zeros((1, size)),
-            _x_w: Array2::zeros((size, size)),
-            _r_w: Array2::zeros((size, size)),
-            _preactivations: Array2::zeros((size, size)),
-            _activations: Array2::zeros((size, size)),
+            _input: Array2::zeros((0, 0)),
+            _states: Array2::zeros((0, 0)),
+            _x_w: Array2::zeros((0, 0)),
+            _r_w: Array2::zeros((0, 0)),
+            _preactivations: Array2::zeros((0, 0)),
+            _activations: Array2::zeros((0, 0)),
 
-            d_wi: Array2::zeros((size, size)),
-            d_wr: Array2::zeros((size, size)),
-            d_b: Array1::zeros(size),
+            d_wi: Array2::zeros((0, 0)),
+            d_wr: Array2::zeros((0, 0)),
+            d_b: Array1::zeros(0),
         }
     }
 
@@ -182,7 +182,7 @@ impl ClosureNet {
     pub fn forward(&mut self, x: Array2<f64>, grad: bool) -> Array2<f64> {
         let p = self.projection.forward(x, grad);
         let r = self.recurrent.forward(p, grad);
-        let c = self.closure.forward(r);
+        let c = self.closure.forward(r, grad);
 
         c
     }

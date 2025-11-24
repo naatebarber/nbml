@@ -62,7 +62,7 @@ impl AttentionHead {
         }
     }
 
-    pub fn forward(&mut self, x: &Array3<f64>, mask: &Array2<f64>, auto: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: &Array3<f64>, mask: &Array2<f64>, grad: bool) -> Array3<f64> {
         let (batch_size, seq_len, feature_size) = x.dim();
 
         let padding_mask = mask
@@ -82,7 +82,7 @@ impl AttentionHead {
 
         let qkv = x.dot(&self.qkv_w) + &self.qkv_b.view().insert_axis(Axis(0));
 
-        if auto {
+        if grad {
             self.x = x.clone();
             self.qkv = qkv.clone();
         }
@@ -106,7 +106,7 @@ impl AttentionHead {
             .into_shape_clone((batch_size * self.n_head, seq_len, self.d_head))
             .unwrap(); // ..
 
-        if auto {
+        if grad {
             self.q = q.clone();
             self.k = k.clone();
             self.v = v.clone();
@@ -134,7 +134,7 @@ impl AttentionHead {
             b_attention.index_axis_mut(Axis(0), i).assign(&attention);
         }
 
-        if auto {
+        if grad {
             self.scores = b_scores.clone();
         }
 
@@ -148,7 +148,7 @@ impl AttentionHead {
 
         let output = attention.dot(&self.o_w) + self.o_b.view().insert_axis(Axis(0));
 
-        if auto {
+        if grad {
             self.o = output.clone();
             self.attention = attention.clone();
         }

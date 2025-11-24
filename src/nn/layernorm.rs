@@ -30,8 +30,8 @@ impl LayerNorm {
             mean: Array1::zeros(0),
             var: Array1::zeros(0),
 
-            d_gamma: Array2::ones((1, d_in)),
-            d_beta: Array1::zeros(d_in),
+            d_gamma: Array2::ones((0, 0)),
+            d_beta: Array1::zeros(0),
         }
     }
 

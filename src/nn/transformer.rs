@@ -29,12 +29,12 @@ impl Transformer {
         }
     }
 
-    pub fn forward(&mut self, x: &Array3<f64>, auto: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: &Array3<f64>, grad: bool) -> Array3<f64> {
         let (batch_size, sequence_len, features) = x.dim();
 
         let mask = PadMask::zero_mask_batch(x);
 
-        let x_attention = self.head.forward(&x, &mask, auto); // [B, S, F]
+        let x_attention = self.head.forward(&x, &mask, grad); // [B, S, F]
 
         let x_norm_head = self.norm_head.forward(x + x_attention); // [B, S, F]
 
@@ -43,7 +43,7 @@ impl Transformer {
             .into_shape_clone((batch_size * sequence_len, features))
             .unwrap();
 
-        let x_ff_2 = self.feed_forward.forward(x_norm_head_2, auto);
+        let x_ff_2 = self.feed_forward.forward(x_norm_head_2, grad);
 
         let (.., d_out) = x_ff_2.dim();
 

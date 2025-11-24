@@ -11,8 +11,8 @@ impl SequencePooling {
         Self { d_last: 0 }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, auto: bool) -> Array2<f64> {
-        if auto {
+    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array2<f64> {
+        if grad {
             self.d_last = x.dim().1;
         }
 

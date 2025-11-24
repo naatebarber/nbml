@@ -58,9 +58,9 @@ impl Recurrent {
             trajectory: RecurrentTrajectory::new(),
             trajectories: VecDeque::new(),
 
-            d_wi: Array2::zeros((size, size)),
-            d_wr: Array2::zeros((size, size)),
-            d_b: Array1::zeros(size),
+            d_wi: Array2::zeros((0, 0)),
+            d_wr: Array2::zeros((0, 0)),
+            d_b: Array1::zeros(0),
         }
     }
 
