@@ -9,7 +9,7 @@ use super::layernorm::LayerNorm;
 use super::pad_mask::PadMask;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Transformer {
+pub struct TransformerEncoder {
     pub d_in: usize,
     pub head: AttentionHead,
     pub norm_head: LayerNorm,
@@ -17,9 +17,14 @@ pub struct Transformer {
     pub norm_feed_forward: LayerNorm,
 }
 
-impl Transformer {
-    pub fn new(d_in: usize, d_head: usize, n_head: usize, ff_layers: Vec<LayerDef>) -> Transformer {
-        Transformer {
+impl TransformerEncoder {
+    pub fn new(
+        d_in: usize,
+        d_head: usize,
+        n_head: usize,
+        ff_layers: Vec<LayerDef>,
+    ) -> TransformerEncoder {
+        TransformerEncoder {
             d_in,
 
             head: AttentionHead::new(d_in, d_head, n_head),
@@ -29,14 +34,54 @@ impl Transformer {
         }
     }
 
-    pub fn forward(&mut self, x: &Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        let (batch_size, seq_len, features) = x.dim();
+
+        let norm_x = self.norm_head.forward(x.clone(), grad);
+        let mask = PadMask::zero_mask_batch(&x);
+        let attn_x = self.head.forward(&norm_x, &mask, grad);
+        let x = x + &attn_x;
+
+        let norm_x = self.norm_feed_forward.forward(x.clone(), grad);
+        let norm_x_2d = norm_x
+            .into_shape_clone((batch_size * seq_len, features))
+            .unwrap();
+        let ff_x_2d = self.feed_forward.forward(norm_x_2d, grad);
+        let ff_x = ff_x_2d
+            .into_shape_clone((batch_size, seq_len, features))
+            .unwrap();
+        let x = x + ff_x;
+
+        x
+    }
+
+    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        let (batch_size, seq_len, features) = d_loss.dim();
+
+        let d_loss_2d = d_loss
+            .clone()
+            .into_shape_clone((batch_size * seq_len, features))
+            .unwrap();
+        let d_ffn_2d = self.feed_forward.backward(d_loss_2d);
+        let d_ffn = d_ffn_2d
+            .into_shape_clone((batch_size, seq_len, features))
+            .unwrap();
+        let d_norm_1 = d_loss + self.norm_feed_forward.backward(d_ffn);
+
+        let d_attn = self.head.backward(d_norm_1.clone());
+        let d_norm = self.norm_head.backward(d_attn);
+
+        d_norm + d_norm_1
+    }
+
+    pub fn forward_post(&mut self, x: &Array3<f64>, grad: bool) -> Array3<f64> {
         let (batch_size, sequence_len, features) = x.dim();
 
         let mask = PadMask::zero_mask_batch(x);
 
         let x_attention = self.head.forward(&x, &mask, grad); // [B, S, F]
 
-        let x_norm_head = self.norm_head.forward(x + x_attention); // [B, S, F]
+        let x_norm_head = self.norm_head.forward(x + x_attention, grad); // [B, S, F]
 
         let x_norm_head_2 = x_norm_head
             .clone()
@@ -51,12 +96,12 @@ impl Transformer {
             .into_shape_clone((batch_size, sequence_len, d_out))
             .unwrap();
 
-        let x_norm_ff = self.norm_feed_forward.forward(x_norm_head + x_ff);
+        let x_norm_ff = self.norm_feed_forward.forward(x_norm_head + x_ff, grad);
 
         x_norm_ff
     }
 
-    pub fn backward(&mut self, d_a: Array3<f64>) -> Array3<f64> {
+    pub fn backward_post(&mut self, d_a: Array3<f64>) -> Array3<f64> {
         let (batch_size, sequence_len, d_out) = d_a.dim();
 
         let d_norm_ff = self.norm_feed_forward.backward(d_a);
@@ -80,7 +125,7 @@ impl Transformer {
     }
 }
 
-impl ToParams for Transformer {
+impl ToParams for TransformerEncoder {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
         let mut params = vec![];
 

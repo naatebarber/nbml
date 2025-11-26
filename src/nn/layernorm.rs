@@ -3,106 +3,81 @@ use serde::{Deserialize, Serialize};
 
 use crate::optim::param::{Param, ToParams};
 
-const EPS: f64 = 1e-6;
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LayerNorm {
-    pub gamma: Array2<f64>,
+    pub gamma: Array1<f64>,
     pub beta: Array1<f64>,
 
-    pub x: Array2<f64>,
+    pub o: Array2<f64>,
     pub x_h: Array2<f64>,
-    pub mean: Array1<f64>,
-    pub var: Array1<f64>,
 
-    pub d_gamma: Array2<f64>,
+    pub d_gamma: Array1<f64>,
     pub d_beta: Array1<f64>,
 }
 
 impl LayerNorm {
     pub fn new(d_in: usize) -> LayerNorm {
         LayerNorm {
-            gamma: Array2::ones((1, d_in)),
+            gamma: Array1::ones(d_in),
             beta: Array1::zeros(d_in),
 
-            x: Array2::zeros((0, 0)),
+            o: Array2::zeros((0, 0)),
             x_h: Array2::zeros((0, 0)),
-            mean: Array1::zeros(0),
-            var: Array1::zeros(0),
 
-            d_gamma: Array2::ones((0, 0)),
+            d_gamma: Array1::ones(0),
             d_beta: Array1::zeros(0),
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
         let (batch_size, seq_len, feature_size) = x.dim();
 
-        let mut x = x
+        let x = x
             .into_shape_clone((batch_size * seq_len, feature_size))
             .unwrap();
 
-        self.x = x.clone();
-        self.mean = Array1::zeros(batch_size * seq_len);
-        self.var = Array1::zeros(batch_size * seq_len);
+        let m = (1. / feature_size as f64) * x.sum_axis(Axis(1)).insert_axis(Axis(1));
+        let u = &x - &m;
+        let v = (1. / feature_size as f64)
+            * &(u.clone().powi(2)).sum_axis(Axis(1)).insert_axis(Axis(1));
+        let o = (&v + 1e-5).sqrt(); // (B * S, 1)
 
-        x.axis_iter_mut(Axis(0))
-            .enumerate()
-            .for_each(|(i, mut x_r)| {
-                let mean = x_r.mean().unwrap();
-                let var = x_r.mapv(|x_v| (x_v - mean).powi(2)).mean().unwrap();
-                let std = (var + EPS).sqrt();
+        let x_h = &u / &o;
+        let y_2 = (&x_h * &self.gamma) + &self.beta;
 
-                x_r.mapv_inplace(|v| (v - mean) / std);
+        if grad {
+            self.o = o;
+            self.x_h = x_h;
+        }
 
-                self.mean[i] = mean;
-                self.var[i] = var;
-            });
-
-        self.x_h = x.clone();
-
-        let x_n = (&x * &self.gamma) + &self.beta.view().insert_axis(Axis(0));
-        x_n.into_shape_clone((batch_size, seq_len, feature_size))
+        y_2.into_shape_clone((batch_size, seq_len, feature_size))
             .unwrap()
     }
 
-    pub fn backward(&mut self, d_a: Array3<f64>) -> Array3<f64> {
-        let (batch_size, seq_len, feature_size) = d_a.dim();
-        let d_a = d_a
-            .into_shape_clone((batch_size * seq_len, feature_size))
+    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        let (batch_size, seq_len, features) = d_loss.dim();
+        let d_loss = d_loss
+            .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
 
-        self.d_gamma = (&d_a * &self.x_h).sum_axis(Axis(0)).insert_axis(Axis(0));
-        self.d_beta = d_a.sum_axis(Axis(0));
+        self.d_gamma = (&d_loss * &self.x_h).sum_axis(Axis(0));
+        self.d_beta = d_loss.sum_axis(Axis(0));
 
-        let (.., d_in) = d_a.dim();
+        let dx_hat = &d_loss * &self.gamma;
+        let dx = (1. / (features as f64 * &self.o))
+            * (features as f64 * &dx_hat
+                - &dx_hat.sum_axis(Axis(1)).insert_axis(Axis(1))
+                - &self.x_h * (&dx_hat * &self.x_h).sum_axis(Axis(1)).insert_axis(Axis(1)));
 
-        let d_xh = &d_a * &self.gamma;
-
-        let stddev = (&self.var + EPS).sqrt().insert_axis(Axis(1));
-
-        let sum_d_xh = d_xh.sum_axis(Axis(1)).insert_axis(Axis(1));
-        let sum_d_xh_xh = (&d_xh * &self.x_h).sum_axis(Axis(1)).insert_axis(Axis(1));
-
-        let d_x = (&d_xh * (d_in as f64)) - sum_d_xh - (&self.x_h * sum_d_xh_xh);
-
-        let d_x = &d_x * (1.0 / d_in as f64);
-        let d_x = &d_x / &stddev;
-
-        let d_x = d_x
-            .into_shape_clone((batch_size, seq_len, feature_size))
-            .unwrap();
-        d_x
+        dx.into_shape_clone((batch_size, seq_len, features))
+            .unwrap()
     }
 }
 
 impl ToParams for LayerNorm {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
-        let mut gamma_p = Param::matrix(&mut self.gamma).with_matrix_grad(&mut self.d_gamma);
-        gamma_p.enable_weight_decay = false;
-
         vec![
-            gamma_p,
+            Param::vector(&mut self.gamma).with_vector_grad(&mut self.d_gamma),
             Param::vector(&mut self.beta).with_vector_grad(&mut self.d_beta),
         ]
     }
