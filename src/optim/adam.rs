@@ -34,7 +34,7 @@ impl Default for AdamW {
             beta1: 0.9,
             beta2: 0.999,
             learning_rate: 3e-4,
-            clip_grad: 0.3,
+            clip_grad: 1.0,
             weight_decay: 0.001,
             epsilon: 1e-8,
             t: 1,

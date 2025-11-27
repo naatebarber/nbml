@@ -228,9 +228,9 @@ impl Activation {
             Self::SoftmaxCrossEntropy => (softmax, d_softmax_cross_entropy, xavier),
             Self::Identity => (ident, d_ident, he),
             Self::Exp => (exp, d_exp, he),
-            Self::Sigmoid => (sigmoid, d_sigmoid, he),
-            Self::Tanh => (tanh, d_tanh, he),
-            Self::Softplus => (softplus, d_softplus, he),
+            Self::Sigmoid => (sigmoid, d_sigmoid, xavier),
+            Self::Tanh => (tanh, d_tanh, xavier_normal),
+            Self::Softplus => (softplus, d_softplus, xavier),
         }
     }
 }

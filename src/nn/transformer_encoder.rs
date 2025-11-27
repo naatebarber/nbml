@@ -42,6 +42,10 @@ impl TransformerEncoder {
         let attn_x = self.head.forward(&norm_x, &mask, grad);
         let x = x + &attn_x;
 
+        if x.is_any_nan() {
+            panic!("attn")
+        }
+
         let norm_x = self.norm_feed_forward.forward(x.clone(), grad);
         let norm_x_2d = norm_x
             .into_shape_clone((batch_size * seq_len, features))
@@ -51,6 +55,10 @@ impl TransformerEncoder {
             .into_shape_clone((batch_size, seq_len, features))
             .unwrap();
         let x = x + ff_x;
+
+        if x.is_any_nan() {
+            panic!("ff")
+        }
 
         x
     }

@@ -19,13 +19,15 @@ impl SequencePooling {
         x.mean_axis(Axis(1)).unwrap()
     }
 
-    pub fn backward(&mut self, d_a: Array2<f64>) -> Array3<f64> {
-        let (batch, features) = d_a.dim();
+    pub fn backward(&mut self, d_loss: Array2<f64>) -> Array3<f64> {
+        let (batch, features) = d_loss.dim();
 
-        d_a.mapv(|x| x / self.d_last as f64)
+        let d_loss = d_loss
             .insert_axis(Axis(1))
             .broadcast((batch, self.d_last, features))
             .unwrap()
-            .to_owned()
+            .to_owned();
+
+        &d_loss * (1. / self.d_last as f64)
     }
 }
