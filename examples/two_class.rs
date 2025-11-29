@@ -27,8 +27,9 @@ impl Classifier {
     }
 
     pub fn forward(&mut self, x: Array3<f64>) -> Array2<f64> {
-        let x = self.transformer.forward(x, true);
-        let x = self.pooling.forward(x, true);
+        let mask = Array2::ones((x.dim().0, x.dim().1));
+        let x = self.transformer.forward(x, mask.clone(), true);
+        let x = self.pooling.forward(x, mask, true);
         self.feed_forward.forward(x, true)
     }
 

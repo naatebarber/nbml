@@ -3,7 +3,7 @@ use nbml::{
     nn::TransformerEncoder,
     optim::{adam::AdamW, optimizer::Optimizer},
 };
-use ndarray::{Array3, Axis};
+use ndarray::{Array2, Array3, Axis};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 const EMBED_DIM: usize = 16;
@@ -35,7 +35,8 @@ fn identity() {
     let mut losses = Vec::new();
 
     for epoch in 0..2000 {
-        let y_pred = transformer.forward(x.clone(), true);
+        let mask = Array2::ones((x.dim().0, x.dim().1));
+        let y_pred = transformer.forward(x.clone(), mask, true);
         let loss = (&y_pred - &y_target).mapv(|v| v.powi(2)).mean().unwrap();
         let d_loss = 2. * (&y_pred - &y_target) / (y_pred.len() as f64);
 
@@ -95,7 +96,8 @@ pub fn mean_pooling() {
     let mut losses2 = Vec::new();
 
     for epoch in 0..3000 {
-        let y_pred = transformer2.forward(x2.clone(), true);
+        let mask = Array2::ones((x2.dim().0, x2.dim().1));
+        let y_pred = transformer2.forward(x2.clone(), mask, true);
         let loss = (&y_pred - &y_target2).mapv(|v| v.powi(2)).mean().unwrap();
         let d_loss = 2. * (&y_pred - &y_target2) / (y_pred.len() as f64);
 
@@ -140,7 +142,8 @@ fn gradient_flow() {
     );
 
     let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
-    let y = transformer.forward(x.clone(), true);
+    let mask = Array2::ones((x.dim().0, x.dim().1));
+    let y = transformer.forward(x.clone(), mask, true);
 
     // Create a gradient signal
     let d_loss = Array3::ones(y.dim());
@@ -198,7 +201,8 @@ fn overfitting() {
     let mut final_loss = 1.0;
 
     for epoch in 0..5000 {
-        let y_pred = transformer.forward(x.clone(), true);
+        let mask = Array2::ones((x.dim().0, x.dim().1));
+        let y_pred = transformer.forward(x.clone(), mask, true);
         let loss = (&y_pred - &y_target).mapv(|v| v.powi(2)).mean().unwrap();
         let d_loss = 2. * (&y_pred - &y_target) / (y_pred.len() as f64);
 

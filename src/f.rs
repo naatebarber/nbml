@@ -109,6 +109,11 @@ pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
 
 // MISC
 
+pub fn linear_norm(x: &Array2<f64>) -> Array2<f64> {
+    let sum = x.sum_axis(Axis(1)).insert_axis(Axis(1));
+    x / &sum
+}
+
 pub fn softmax_vector_jacobian_product(
     upstream: &Array2<f64>,
     softmax_out: &Array2<f64>,

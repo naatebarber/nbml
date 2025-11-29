@@ -1,4 +1,4 @@
-use ndarray::Array3;
+use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 
 use crate::optim::param::ToParams;
@@ -34,12 +34,11 @@ impl TransformerEncoder {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f64>, attn_mask: Array2<f64>, grad: bool) -> Array3<f64> {
         let (batch_size, seq_len, features) = x.dim();
 
         let norm_x = self.norm_head.forward(x.clone(), grad);
-        let mask = PadMask::zero_mask_batch(&x);
-        let attn_x = self.head.forward(&norm_x, &mask, grad);
+        let attn_x = self.head.forward(&norm_x, &attn_mask, grad);
         let x = x + &attn_x;
 
         if x.is_any_nan() {
