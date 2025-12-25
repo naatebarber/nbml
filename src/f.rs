@@ -1,6 +1,6 @@
 use core::f64;
 
-use ndarray::{Array1, Array2, Axis};
+use ndarray::{Array1, Array2, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use ndarray_stats::QuantileExt;
 use rand::{Rng, rngs::ThreadRng};
@@ -166,6 +166,17 @@ pub fn clip_grad(mut grad: Array2<f64>, clip: f64) -> Array2<f64> {
     }
 
     grad
+}
+
+pub fn causal_mask(n: usize) -> Array2<f64> {
+    let mut mask = Array2::zeros((n, n));
+
+    for i in 0..n {
+        mask.slice_mut(s![i, 0..(i + 1)])
+            .assign(&Array1::ones(i + 1));
+    }
+
+    mask
 }
 
 pub fn sample_categorical(probs: &Array1<f64>, rng: &mut ThreadRng) -> usize {

@@ -2,7 +2,7 @@ use ndarray::{Array1, Array2, Array3, Array4, Axis, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f,
+    f::{self, causal_mask},
     optim::param::{Param, ToParams},
 };
 
@@ -62,7 +62,13 @@ impl AttentionHead {
         }
     }
 
-    pub fn forward(&mut self, x: &Array3<f64>, mask: &Array2<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(
+        &mut self,
+        x: &Array3<f64>,
+        mask: &Array2<f64>,
+        decoder: bool,
+        grad: bool,
+    ) -> Array3<f64> {
         let (batch_size, seq_len, feature_size) = x.dim();
 
         let padding_mask = mask
@@ -74,6 +80,12 @@ impl AttentionHead {
             .to_shape((batch_size * self.n_head, 1, seq_len)) // (B * H, 1, S)
             .unwrap()
             .to_owned();
+
+        let causal_mask = if decoder {
+            causal_mask(seq_len).mapv(|x| if x == 0. { f64::NEG_INFINITY } else { 0. })
+        } else {
+            Array2::zeros((seq_len, seq_len))
+        };
 
         let x = x
             .clone()
@@ -126,6 +138,9 @@ impl AttentionHead {
             let mut scores = q_i.dot(&k_i.t()) / f64::sqrt(self.d_head as f64); // (S, S)
 
             scores += &padding_mask_i.broadcast((seq_len, seq_len)).unwrap();
+            if decoder {
+                scores += &causal_mask;
+            }
 
             let weights = f::softmax(&scores); // (S, S)
             let attention = weights.dot(&v_i); // (S, dH)

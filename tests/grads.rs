@@ -21,7 +21,7 @@ fn attention_gradients() {
     println!("Testing Attention Gradients...\n");
 
     // Analytical gradient via backward pass
-    let y = attn.forward(&x, &mask, true);
+    let y = attn.forward(&x, &mask, false, true);
     let d_loss = Array3::ones(y.dim()); // Upstream gradient
     let dx_analytical = attn.backward(d_loss.clone());
 
@@ -46,14 +46,14 @@ fn attention_gradients() {
                 attn_plus.qkv_b = attn.qkv_b.clone();
                 attn_plus.o_w = attn.o_w.clone();
                 attn_plus.o_b = attn.o_b.clone();
-                let y_plus = attn_plus.forward(&x_plus, &mask, false);
+                let y_plus = attn_plus.forward(&x_plus, &mask, false, false);
 
                 let mut attn_minus = AttentionHead::new(d_in, d_head, n_head);
                 attn_minus.qkv_w = attn.qkv_w.clone();
                 attn_minus.qkv_b = attn.qkv_b.clone();
                 attn_minus.o_w = attn.o_w.clone();
                 attn_minus.o_b = attn.o_b.clone();
-                let y_minus = attn_minus.forward(&x_minus, &mask, false);
+                let y_minus = attn_minus.forward(&x_minus, &mask, false, false);
 
                 // Compute numerical gradient
                 let loss_plus = (&d_loss * &y_plus).sum();
@@ -107,7 +107,7 @@ fn test_param_gradient(
 ) {
     println!("\nTesting {} gradients...", param_name);
 
-    let y = attn.forward(x, mask, true);
+    let y = attn.forward(x, mask, false, true);
     let d_loss = Array3::ones(y.dim());
     let _ = attn.backward(d_loss.clone());
 
@@ -139,7 +139,7 @@ fn test_param_gradient(
             "o_w" => attn.o_w[[i, j]] = original_val + epsilon,
             _ => {}
         }
-        let y_plus = attn.forward(x, mask, false);
+        let y_plus = attn.forward(x, mask, false, false);
         let loss_plus = (&d_loss * &y_plus).sum();
 
         // Minus perturbation
@@ -148,7 +148,7 @@ fn test_param_gradient(
             "o_w" => attn.o_w[[i, j]] = original_val - epsilon,
             _ => {}
         }
-        let y_minus = attn.forward(x, mask, false);
+        let y_minus = attn.forward(x, mask, false, false);
         let loss_minus = (&d_loss * &y_minus).sum();
 
         // Restore
@@ -187,6 +187,7 @@ fn test_param_gradient(
     }
 }
 
+#[test]
 fn test_layernorm_gradients() {
     let features = 5;
     let mut ln = LayerNorm::new(features);
@@ -252,8 +253,4 @@ fn test_layernorm_gradients() {
         println!("Expected max diff < 1e-5, got {:.2e}", max_diff);
         assert!(false);
     }
-}
-
-fn main() {
-    test_layernorm_gradients();
 }

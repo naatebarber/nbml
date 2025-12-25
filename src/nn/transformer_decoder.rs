@@ -8,7 +8,7 @@ use super::ffn::{FFN, LayerDef};
 use super::layernorm::LayerNorm;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct TransformerEncoder {
+pub struct TransformerDecoder {
     pub d_in: usize,
     pub head: AttentionHead,
     pub norm_head: LayerNorm,
@@ -16,7 +16,7 @@ pub struct TransformerEncoder {
     pub norm_feed_forward: LayerNorm,
 }
 
-impl TransformerEncoder {
+impl TransformerDecoder {
     pub fn new(d_in: usize, d_head: usize, n_head: usize, ff_layers: Vec<LayerDef>) -> Self {
         Self {
             d_in,
@@ -32,7 +32,7 @@ impl TransformerEncoder {
         let (batch_size, seq_len, features) = x.dim();
 
         let norm_x = self.norm_head.forward(x.clone(), grad);
-        let attn_x = self.head.forward(&norm_x, &attn_mask, false, grad);
+        let attn_x = self.head.forward(&norm_x, &attn_mask, true, grad);
         let x = x + &attn_x;
 
         let norm_x = self.norm_feed_forward.forward(x.clone(), grad);
@@ -68,7 +68,7 @@ impl TransformerEncoder {
     }
 }
 
-impl ToParams for TransformerEncoder {
+impl ToParams for TransformerDecoder {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
         let mut params = vec![];
 

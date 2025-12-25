@@ -27,7 +27,7 @@ fn corruption_test() {
     let epochs = 10000;
 
     for e in 0..epochs {
-        let y_pred = ah.forward(&x, &Array2::ones((1, 5)), true);
+        let y_pred = ah.forward(&x, &Array2::ones((1, 5)), false, true);
         let mse = (&y_pred - &y_train).mapv(|x| x * x).mean().unwrap();
 
         let d_loss = (&y_pred - &y_train) * 2.;
@@ -40,14 +40,14 @@ fn corruption_test() {
         }
     }
 
-    let y_pred = ah.forward(&x, &Array2::ones((1, 5)), false);
+    let y_pred = ah.forward(&x, &Array2::ones((1, 5)), false, false);
     println!("CONTROL: {:?}", y_pred);
 
     let mut y_test = src.clone();
     y_test[2] = 0.;
     let x_test = y_test.insert_axis(Axis(1)).insert_axis(Axis(0));
 
-    let y_pred = ah.forward(&x_test, &Array2::ones((1, 5)), false);
+    let y_pred = ah.forward(&x_test, &Array2::ones((1, 5)), false, false);
     println!("TEST: {:?}", y_pred);
 }
 
@@ -104,7 +104,7 @@ fn inference_test() {
             .unwrap()
             .to_owned();
 
-        let y_pred = ah.forward(&x, &Array2::ones((1, 5)), true);
+        let y_pred = ah.forward(&x, &Array2::ones((1, 5)), false, true);
         let mse = ((&y_pred - &y) * &d_loss_mask)
             .mapv(|x| x * x)
             .mean()
@@ -129,7 +129,7 @@ fn inference_test() {
         .unwrap()
         .to_owned();
 
-    let y_pred = ah.forward(&test_x, &Array2::ones((1, 5)), false);
+    let y_pred = ah.forward(&test_x, &Array2::ones((1, 5)), false, false);
     println!("ix: {}", ix);
     println!("QUESTION: {:?}", test_x);
     println!("TEST: {:?}", y_pred);
