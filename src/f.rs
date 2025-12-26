@@ -135,6 +135,26 @@ pub fn softmax_vector_jacobian_product(
     grad
 }
 
+pub fn positional_encoding_seq(seq_len: usize, features: usize) -> Array2<f64> {
+    assert!(
+        features % 2 == 0,
+        "positional encoding: features must be even, got {}",
+        features
+    );
+    let mut pe = Array2::zeros((seq_len, features));
+    let n: f64 = 10_000.;
+
+    for k in 0..seq_len {
+        for i in 0..(features / 2) {
+            let exp = n.powi(((2 * i) / features) as i32);
+            pe[[k, 2 * i]] = f64::sin((k as f64) / exp);
+            pe[[k, 2 * i + 1]] = f64::cos((k as f64) / exp);
+        }
+    }
+
+    pe
+}
+
 // TODO: Use with Gumbel max sampling, avoid standard softmax entirely.
 pub fn log_softmax(x: Array2<f64>) -> Array2<f64> {
     let maxes = x
