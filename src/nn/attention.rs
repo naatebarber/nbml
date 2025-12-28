@@ -180,8 +180,20 @@ impl AttentionHead {
             .into_shape_clone((batch_size * sequence_len, feature_size))
             .unwrap();
 
-        self.d_o_w = self.attention.t().dot(&d_a);
-        self.d_o_b = d_a.sum_axis(Axis(0));
+        let d_o_w = self.attention.t().dot(&d_a);
+        let d_o_b = d_a.sum_axis(Axis(0));
+
+        self.d_o_w = if self.d_o_w.dim() == (0, 0) {
+            d_o_w
+        } else {
+            &self.d_o_w + &d_o_w
+        };
+
+        self.d_o_b = if self.d_o_b.dim() == 0 {
+            d_o_b
+        } else {
+            &self.d_o_b + &d_o_b
+        };
 
         let d_a = d_a.dot(&self.o_w.t()); // (B * S, H * dH)
 
@@ -237,8 +249,20 @@ impl AttentionHead {
             .into_shape_clone((batch_size * sequence_len, 3 * self.n_head * self.d_head))
             .unwrap();
 
-        self.d_qkv_w = self.x.t().dot(&d_qkv);
-        self.d_qkv_b = d_qkv.sum_axis(Axis(0));
+        let d_qkv_w = self.x.t().dot(&d_qkv);
+        let d_qkv_b = d_qkv.sum_axis(Axis(0));
+
+        self.d_qkv_w = if self.d_qkv_w.dim() == (0, 0) {
+            d_qkv_w
+        } else {
+            &self.d_qkv_w + &d_qkv_w
+        };
+
+        self.d_qkv_b = if self.d_qkv_b.dim() == 0 {
+            d_qkv_b
+        } else {
+            &self.d_qkv_b + &d_qkv_b
+        };
 
         let d_x_qkv = d_qkv.dot(&self.qkv_w.t());
 

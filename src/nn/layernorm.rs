@@ -24,7 +24,7 @@ impl LayerNorm {
             o: Array2::zeros((0, 0)),
             x_h: Array2::zeros((0, 0)),
 
-            d_gamma: Array1::ones(0),
+            d_gamma: Array1::zeros(0),
             d_beta: Array1::zeros(0),
         }
     }
@@ -60,8 +60,20 @@ impl LayerNorm {
             .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
 
-        self.d_gamma = (&d_loss * &self.x_h).sum_axis(Axis(0));
-        self.d_beta = d_loss.sum_axis(Axis(0));
+        let d_gamma = (&d_loss * &self.x_h).sum_axis(Axis(0));
+        let d_beta = d_loss.sum_axis(Axis(0));
+
+        self.d_gamma = if self.d_gamma.dim() == 0 {
+            d_gamma
+        } else {
+            &self.d_gamma + &d_gamma
+        };
+
+        self.d_beta = if self.d_beta.dim() == 0 {
+            d_beta
+        } else {
+            &self.d_beta + &d_beta
+        };
 
         let dx_hat = &d_loss * &self.gamma;
         let dx = (1. / (features as f64 * &self.o))

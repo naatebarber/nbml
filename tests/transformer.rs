@@ -1,7 +1,7 @@
 use nbml::{
     f::Activation,
     nn::TransformerEncoder,
-    optim::{adam::AdamW, optimizer::Optimizer},
+    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 use ndarray::{Array2, Array3, Axis};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
@@ -42,6 +42,7 @@ fn identity() {
 
         transformer.backward(d_loss);
         optim.step(&mut transformer);
+        transformer.zero_grads();
 
         if epoch % 200 == 0 {
             println!("  Epoch {}: loss = {:.6}", epoch, loss);
@@ -103,6 +104,7 @@ pub fn mean_pooling() {
 
         transformer2.backward(d_loss);
         optim2.step(&mut transformer2);
+        transformer2.zero_grads();
 
         if epoch % 300 == 0 {
             println!("  Epoch {}: loss = {:.6}", epoch, loss);
@@ -208,6 +210,7 @@ fn overfitting() {
 
         transformer.backward(d_loss);
         optim.step(&mut transformer);
+        transformer.zero_grads();
 
         final_loss = loss;
 

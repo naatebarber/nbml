@@ -1,4 +1,7 @@
-use nbml::nn::{AttentionHead, LayerNorm};
+use nbml::{
+    nn::{AttentionHead, LayerNorm},
+    optim::param::ToParams,
+};
 use ndarray::{Array2, Array3};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
@@ -86,7 +89,9 @@ fn attention_gradients() {
 
     // Test parameter gradients too
     println!("\n=== Testing Parameter Gradients ===");
+    attn.zero_grads();
     test_param_gradient(&mut attn, &x, &mask, "qkv_w", epsilon);
+    attn.zero_grads();
     test_param_gradient(&mut attn, &x, &mask, "o_w", epsilon);
 
     // Success criteria

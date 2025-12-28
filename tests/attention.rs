@@ -1,6 +1,6 @@
 use nbml::{
     nn::AttentionHead,
-    optim::{adam::AdamW, optimizer::Optimizer},
+    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
@@ -88,8 +88,8 @@ fn encoder_selector() {
         let loss = (&y_pred - &y).mean().unwrap().powi(2);
         let d_loss = 2. * &y_pred - &y;
         attn.backward(d_loss);
-
         optim.step(&mut attn);
+        attn.zero_grads();
 
         println!("epoch {e} loss {loss}");
     }

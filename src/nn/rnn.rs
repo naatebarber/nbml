@@ -105,10 +105,27 @@ impl Recurrent {
             d_state_next += &t.d_loss;
             let d_z = &d_state_next * &f::d_tanh(&t.preactivations);
 
-            self.d_wi += &t.input.t().dot(&d_z);
-            self.d_wr += &t.state.t().dot(&d_z);
+            let d_wi = t.input.t().dot(&d_z);
+            let d_wr = t.state.t().dot(&d_z);
+            let d_b = d_z.sum_axis(Axis(0));
 
-            self.d_b += &d_z.sum_axis(Axis(0));
+            self.d_wi = if self.d_wi.dim() == (0, 0) {
+                d_wi
+            } else {
+                &self.d_wi + &d_wi
+            };
+
+            self.d_wr = if self.d_wr.dim() == (0, 0) {
+                d_wr
+            } else {
+                &self.d_wr + &d_wr
+            };
+
+            self.d_b = if self.d_b.dim() == 0 {
+                d_b
+            } else {
+                &self.d_b + &d_b
+            };
 
             let diag = Array2::from_diag(&f::d_tanh(&t.preactivations).remove_axis(Axis(0)));
             let jac = diag.dot(&self.w_r.t());

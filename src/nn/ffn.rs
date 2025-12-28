@@ -50,8 +50,20 @@ impl Layer {
 
     pub fn backward(&mut self, d_a: Array2<f64>) -> Array2<f64> {
         let d_z = d_a * &(self.activation.wake().1)(&self.z);
-        self.d_w = self.x.t().dot(&d_z);
-        self.d_b = d_z.sum_axis(Axis(0));
+        let d_w = self.x.t().dot(&d_z);
+        let d_b = d_z.sum_axis(Axis(0));
+
+        self.d_w = if self.d_w.dim() == (0, 0) {
+            d_w
+        } else {
+            &self.d_w + &d_w
+        };
+
+        self.d_b = if self.d_b.dim() == 0 {
+            d_b
+        } else {
+            &self.d_b + &d_b
+        };
 
         d_z.dot(&self.w.t())
     }

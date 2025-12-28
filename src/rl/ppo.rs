@@ -221,6 +221,8 @@ impl PPO {
                 - f::tanh_gaussian_correction_eps(&us))
             .insert_axis(Axis(1));
 
+            // first epoch compares the existing policy to itself, this ratio only comes in handy
+            // during later epochs, where the policy has drifted significantly
             let r = (&log_prob_new - &log_probs).exp();
             let r_clip = r.clamp(1. - clip, 1. + clip);
 
@@ -244,6 +246,8 @@ impl PPO {
             let grad_mean = self.policy_mean_head.backward(d_policy_mean);
             let grad_logstd = self.policy_logstd_head.backward(d_policy_logstd);
 
+            // TODO this is erasing the old gradients each time. only one update is really
+            // happening.
             self.policy.backward(grad_mean + grad_logstd);
         }
 
