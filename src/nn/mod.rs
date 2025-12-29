@@ -11,5 +11,6 @@ pub use attention::*;
 pub use ffn::*;
 pub use layernorm::*;
 pub use pooling::*;
+pub use rnn::*;
 pub use transformer_decoder::*;
 pub use transformer_encoder::*;

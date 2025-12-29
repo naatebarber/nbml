@@ -136,19 +136,16 @@ pub fn softmax_vector_jacobian_product(
 }
 
 pub fn positional_encoding_seq(seq_len: usize, features: usize) -> Array2<f64> {
-    assert!(
-        features % 2 == 0,
-        "positional encoding: features must be even, got {}",
-        features
-    );
     let mut pe = Array2::zeros((seq_len, features));
     let n: f64 = 10_000.;
 
     for k in 0..seq_len {
         for i in 0..(features / 2) {
-            let exp = n.powi(((2 * i) / features) as i32);
+            let exp = n.powf((2.0 * i as f64) / features as f64);
             pe[[k, 2 * i]] = f64::sin((k as f64) / exp);
-            pe[[k, 2 * i + 1]] = f64::cos((k as f64) / exp);
+            if (2 * i + 1) < features {
+                pe[[k, 2 * i + 1]] = f64::cos((k as f64) / exp);
+            }
         }
     }
 
