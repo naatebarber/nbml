@@ -113,7 +113,7 @@ Available optimizers:
 - **`Adam`**: Adaptive moment estimation with bias correction
 - **`SGD`**: Stochastic gradient descent with optional momentum
 
-Use `.with(&mut Optimizable)` to prepare a stateful optimizer (like AdamW) for your network:
+Use `.with(&mut impl ToParams)` to prepare a stateful optimizer (like AdamW) for your network:
 ```rust
 let mut model = AffineAffine::new();
 let mut optim = AdamW::default().with(&mut model); // <- adamw creates momentums, values for all parameters in Model
