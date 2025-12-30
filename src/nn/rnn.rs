@@ -102,7 +102,7 @@ impl RNN {
             self.d_b = Array1::zeros(self.d_model);
         }
 
-        let mut d_output = Array3::zeros(d_loss.dim());
+        let mut d_x = Array3::zeros(d_loss.dim());
         let mut resid = Array2::zeros((batch_size, features));
 
         for t in (0..seq_len).rev() {
@@ -117,13 +117,13 @@ impl RNN {
             self.d_wr += &state.t().dot(&d_z);
             self.d_b += &d_z.sum_axis(Axis(0));
 
-            let d_x = d_z.dot(&self.w_i.t());
-            d_output.slice_mut(s![.., t, ..]).assign(&d_x);
+            let d_x_t = d_z.dot(&self.w_i.t());
+            d_x.slice_mut(s![.., t, ..]).assign(&d_x_t);
 
             resid = d_z.dot(&self.w_r.t());
         }
 
-        d_output
+        d_x
     }
 }
 

@@ -1,7 +1,7 @@
 pub mod attention;
-pub mod experimental;
 pub mod ffn;
 pub mod layernorm;
+pub mod lstm;
 pub mod pooling;
 pub mod rnn;
 pub mod transformer_decoder;
@@ -10,6 +10,7 @@ pub mod transformer_encoder;
 pub use attention::*;
 pub use ffn::*;
 pub use layernorm::*;
+pub use lstm::*;
 pub use pooling::*;
 pub use rnn::*;
 pub use transformer_decoder::*;
