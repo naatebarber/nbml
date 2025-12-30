@@ -27,11 +27,12 @@ use nbml::optim::param::ToParams;
 
 // Build a simple feedforward network
 let mut model = FFN::new(vec![(
-    (784, 12, Activation::Relu)
+    (784, 12, Activation::Relu),
+    (12, 1, Activation::Sigmoid)
 )]);
 
 // Create optimizer
-let mut optimizer = Adam::default().with(&mut model);
+let mut optimizer = AdamW::default().with(&mut model);
 
 // Training loop (simplified)
 for batch in training_data {
