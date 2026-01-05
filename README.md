@@ -6,8 +6,8 @@ Unlike high-level frameworks, `nbml` provides bare primitives and a lightweight 
 
 ## Features
 
-- **Core primitives**: Attention, LSTM, RNN, feedforward layers
-- **Activation functions**: ReLU, Sigmoid, Tanh, Softmax
+- **Core primitives**: Attention, LSTM, RNN, Conv2D, Feedforward layers, etc
+- **Activation functions**: ReLU, Sigmoid, Tanh, Softmax, etc
 - **Optimizers**: AdamW, SGD
 - **Utilities**: Variable Sequence Batching, Gradient Clipping, Gumbel Softmax, Plots, etc
 - **Minimal abstractions**: Direct ndarray integration for custom algorithms
