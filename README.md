@@ -12,12 +12,6 @@ Unlike high-level frameworks, `nbml` provides bare primitives and a lightweight 
 - **Utilities**: Variable Sequence Batching, Gradient Clipping, Gumbel Softmax, Plots, etc
 - **Minimal abstractions**: Direct ndarray integration for custom algorithms
 
-## Installation
-```toml
-[dependencies]
-nbml = "0.2.2"
-```
-
 ## Quick Start
 ```rust
 use nbml::layers::ffn::FFN;
@@ -57,6 +51,8 @@ for batch in training_data {
 - **`AttentionHead`**: Multi-head self-attention mechanism
 - **`TransformerEncoder`**: Pre-norm transformer encoder
 - **`TransformerDecoder`**: Pre-norm transformer decoder
+- **`Conv2D`**: Explicit Im2Col Conv2D layer (CPU efficient, memory hungry)
+- **`PatchwiseConv2D`**: Patchwise Conv2D layer (CPU hungry, memory efficient)
 
 ### Optimizers (`nbml::optim`)
 
@@ -110,7 +106,7 @@ aa.zero_grads();
 ```
 
 Available optimizers:
-- **`Adam`**: Adaptive moment estimation with bias correction
+- **`AdamW`**: Adaptive moment estimation with bias correction
 - **`SGD`**: Stochastic gradient descent with optional momentum
 
 Use `.with(&mut impl ToParams)` to prepare a stateful optimizer (like AdamW) for your network:
@@ -134,9 +130,7 @@ Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
 
 `nbml` is designed for:
 
-- **Learning**: Understanding how neural networks work at a low level
-- **Experimentation**: Rapid prototyping of novel architectures
-- **Research**: Full control over forward and backward passes
+- **Experimentation / Research**: Prototyping of novel architectures, through full control of forward and backward passes
 - **Transparency**: No hidden magic, every operation is explicit
 - **Compute-Constrained Deployment**: Lightweight + no C deps. Very quick for small models.
 
@@ -154,15 +148,20 @@ Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
 use nbml::layers::lstm::LSTM;
 use nbml::optim::adam::Adam;
 
-let mut lstm = LSTM::new(128);
+let mut lstm = LSTM::new(
+    128     // d_model or feature dimension
+);
 let mut optimizer = Adam::default().with(&mut lstm);
 
-for sequence in data {
-    let output = lstm.forward(sequence, true);
+// where batch.dim() is (batch_size, seq_len, features)
+// and features == lstm.d_model == (128 in this case)
+
+for batch in data {
+    let output = lstm.forward(batch, true);
     let loss = compute_loss(&output, &target);
     let grad = lstm.backward(loss);
     optimizer.step();
-    lstm.zero_grad();
+    lstm.zero_grads();
 }
 ```
 
@@ -176,9 +175,15 @@ let mut attention = AttentionHead::new(
     8     // n_head
 );
 
+// where input.dim() is (batch_size, seq_len, features)
+// features == d_in == (512 in this case)
+// and mask == (batch_size, seq_len)
+// with each element as 1. or 0. depending on whether or not the token
+// is padding
+
 let output = attention.forward(
-    &input, // (batch_size, seq_len, features)
-    &mask,  // binary mask, (batch_size, seq_len)
+    input, // (batch_size, seq_len, features)
+    mask,  // binary mask, (batch_size, seq_len)
     false,  // include causal mask (is this a decoder?)
     true    // grad
 );

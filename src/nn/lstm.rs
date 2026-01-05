@@ -219,6 +219,84 @@ impl LSTM {
 
         d_x
     }
+
+    pub fn scan(&self, x: &Array3<f64>) -> (Array3<f64>, Array3<f64>) {
+        let (batch_size, seq_len, features) = x.dim();
+
+        assert!(
+            features == self.d_model,
+            "dimension mismatch, d_model={} d_x={:?}",
+            self.d_model,
+            x.dim()
+        );
+
+        let mut state = Array2::zeros((batch_size, features));
+        let mut cell = Array2::zeros((batch_size, features));
+        let mut output = Array3::zeros(x.dim());
+        let mut cell_output = Array3::zeros(x.dim());
+
+        for t in 0..seq_len {
+            let x_t = x.slice(s![.., t, ..]);
+            let x_i = x_t.dot(&self.w_i);
+            let r = state.dot(&self.w_r);
+
+            let preactivatons = &x_i + &r + &self.b;
+
+            let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
+            let input_gate = f::sigmoid(
+                &preactivatons
+                    .slice(s![.., self.d_model..(2 * self.d_model)])
+                    .to_owned(),
+            );
+            let cell_gate = f::tanh(
+                &preactivatons
+                    .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
+                    .to_owned(),
+            );
+            let output_gate =
+                f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
+
+            cell = &cell * &forget_gate + (&input_gate * &cell_gate);
+            state = &output_gate * f::tanh(&cell);
+
+            output.slice_mut(s![.., t, ..]).assign(&state);
+            cell_output.slice_mut(s![.., t, ..]).assign(&cell);
+        }
+
+        (output, cell_output)
+    }
+
+    pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>, cell: &mut Array2<f64>) {
+        assert!(
+            self.d_model == x.dim().1 && x.dim() == h.dim() && h.dim() == cell.dim(),
+            "dimension mismatch, d_model={} d_x={:?} d_h={:?} d_cell={:?}",
+            self.d_model,
+            x.dim(),
+            h.dim(),
+            cell.dim()
+        );
+
+        let x_i = x.dot(&self.w_i);
+        let r = h.dot(&self.w_r);
+
+        let preactivatons = &x_i + &r + &self.b;
+
+        let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
+        let input_gate = f::sigmoid(
+            &preactivatons
+                .slice(s![.., self.d_model..(2 * self.d_model)])
+                .to_owned(),
+        );
+        let cell_gate = f::tanh(
+            &preactivatons
+                .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
+                .to_owned(),
+        );
+        let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
+
+        *cell = &(*cell) * &forget_gate + (&input_gate * &cell_gate);
+        *h = &output_gate * f::tanh(&cell);
+    }
 }
 
 impl ToParams for LSTM {

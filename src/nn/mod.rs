@@ -1,4 +1,5 @@
 pub mod attention;
+pub mod conv2d;
 pub mod ffn;
 pub mod layernorm;
 pub mod lstm;

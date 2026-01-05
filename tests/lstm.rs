@@ -2,8 +2,43 @@ use nbml::{
     nn::LSTM,
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
-use ndarray::{Array3, Axis, concatenate, s};
+use ndarray::{Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
+
+#[test]
+fn lstm_forward_and_step_compute_same_value() {
+    let mut lstm = LSTM::new(12);
+    let x = Array3::random((1, 12, 12), Uniform::new(0., 1.));
+
+    let pred_forward = lstm.forward(x.clone(), true);
+
+    let mut h = Array2::zeros((1, 12));
+    let mut cell = Array2::zeros((1, 12));
+
+    for i in 0..12 {
+        let x_t = x.slice(s![.., i, ..]).to_owned();
+        lstm.step(&x_t, &mut h, &mut cell);
+    }
+
+    assert!(
+        pred_forward.slice(s![.., -1, ..]).to_owned() == h,
+        "forward scan evolution and step evolution produce different results"
+    );
+}
+
+#[test]
+fn lstm_forward_and_scan_compute_same_value() {
+    let mut lstm = LSTM::new(12);
+    let x = Array3::random((1, 12, 12), Uniform::new(0., 1.));
+
+    let pred_forward = lstm.forward(x.clone(), false);
+    let (h, _cell) = lstm.scan(&x);
+
+    assert!(
+        pred_forward == h,
+        "forward scan evolution and scan evolution produce different results"
+    );
+}
 
 #[test]
 fn lstm_sequence_pred() {
