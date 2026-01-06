@@ -43,6 +43,8 @@ impl RNN {
     pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
         let (batch_size, seq_len, features) = x.dim();
 
+        assert!(features == self.d_model, "feature dimension != d_model");
+
         let mut state = Array2::zeros((batch_size, features));
         let mut output = Array3::zeros(x.dim());
 

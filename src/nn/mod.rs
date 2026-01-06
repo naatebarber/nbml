@@ -2,6 +2,7 @@ pub mod attention;
 pub mod conv2d;
 pub mod ffn;
 pub mod layernorm;
+pub mod linear_ssm;
 pub mod lstm;
 pub mod pooling;
 pub mod rnn;
@@ -9,8 +10,10 @@ pub mod transformer_decoder;
 pub mod transformer_encoder;
 
 pub use attention::*;
+pub use conv2d::*;
 pub use ffn::*;
 pub use layernorm::*;
+pub use linear_ssm::*;
 pub use lstm::*;
 pub use pooling::*;
 pub use rnn::*;
