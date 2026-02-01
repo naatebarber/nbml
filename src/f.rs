@@ -1,6 +1,6 @@
 use core::f64;
 
-use ndarray::{Array1, Array2, Axis, s};
+use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use ndarray_stats::QuantileExt;
 use rand::{Rng, rngs::ThreadRng};
@@ -83,11 +83,17 @@ pub fn softmax(x: &Array2<f64>) -> Array2<f64> {
     return last;
 }
 
-pub fn d_softmax_cross_entropy(x: &Array2<f64>) -> Array2<f64> {
-    x.to_owned()
+pub fn d_softmax(s: &Array2<f64>, g: &Array2<f64>) -> Array2<f64> {
+    let dot = (g * s).sum_axis(Axis(1)).insert_axis(Axis(1));
+    s * (g - dot)
 }
 
-// ACTIVATIONS
+pub fn d_softmax_cross_entropy(x: &Array2<f64>) -> Array2<f64> {
+    // x.to_owned()
+    Array2::ones(x.dim())
+}
+
+// INITS
 
 pub fn he(shape: (usize, usize)) -> Array2<f64> {
     let bound = f64::sqrt(6.) / f64::sqrt(shape.0 as f64);
@@ -105,6 +111,15 @@ pub fn xavier_normal(shape: (usize, usize)) -> Array2<f64> {
 pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
     let bound = (6. / (shape.0 as f64 + shape.1 as f64)).sqrt();
     return Array2::random(shape, Uniform::new(-bound, bound));
+}
+
+// LOSSES
+
+pub fn cross_entropy_loss(probs: &Array3<f64>, targets: &Array3<f64>) -> f64 {
+    let log_probs = probs.mapv(|p| p.max(1e-10).ln());
+    let loss = -(targets * &log_probs).sum() / (probs.dim().0 * probs.dim().1) as f64;
+    
+    loss
 }
 
 // MISC

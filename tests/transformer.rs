@@ -1,10 +1,11 @@
 use nbml::{
-    f::Activation,
-    nn::TransformerEncoder,
+    f::{Activation, positional_encoding_seq},
+    nn::{TransformerDecoder, TransformerEncoder},
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
-use ndarray::{Array2, Array3, Axis};
+use ndarray::{Array1, Array2, Array3, Axis, stack, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
+use rand::{Rng, rng};
 
 const EMBED_DIM: usize = 16;
 const NUM_HEADS: usize = 2;
@@ -237,4 +238,254 @@ fn overfitting() {
         println!("  This suggests a fundamental issue with the model or optimizer");
         assert!(false)
     }
+}
+
+#[test]
+fn retrieval_by_marker() {
+    // Input: [v1, v2, v3, MARKER, zeros]
+    // Output: [zeros, zeros, zeros, zeros, v_marked]
+    // 
+    // The marker position (one-hot in last dim) tells which vector to output.
+    // This is pure content-based attention - what transformers are MADE for.
+    
+    let mut model = TransformerDecoder::new(16, 8, 2, vec![
+        (16, 64, Activation::Relu),
+        (64, 16, Activation::Identity)
+    ]);
+    let mut optim = AdamW::default().with(&mut model);
+    optim.learning_rate = 1e-2;
+    
+    let mut final_loss = 0.;
+    for e in 0..4000 {
+        // 3 random vectors
+        let v1 = Array1::random(16, Uniform::new(0., 1.));
+        let v2 = Array1::random(16, Uniform::new(0., 1.));
+        let v3 = Array1::random(16, Uniform::new(0., 1.));
+        
+        // Marker: which one to retrieve (0, 1, or 2)
+        let target_idx = rng().random_range(0..3);
+        let mut marker = Array1::zeros(16);
+        marker[target_idx] = 1.0;
+        
+        let target = match target_idx {
+            0 => v1.clone(),
+            1 => v2.clone(),
+            _ => v3.clone(),
+        };
+        
+        // Build sequence: [v1, v2, v3, marker, output_position]
+        let x = stack![
+            Axis(0),
+            v1.view(),
+            v2.view(),
+            v3.view(),
+            marker.view(),
+            Array1::zeros(16).view()
+        ].insert_axis(Axis(0));  // (1, 5, 16)
+        
+        let mut y = Array3::zeros((1, 5, 16));
+        y.slice_mut(s![0, 4, ..]).assign(&target);
+        
+        let mask = Array2::ones((1, 5));
+        let y_pred = model.forward(x, mask, true);
+        
+        // Only grade last position
+        let pred_last = y_pred.slice(s![.., 4..5, ..]);
+        let y_last = y.slice(s![.., 4..5, ..]);
+        
+        let loss = (&pred_last - &y_last).mapv(|v| v * v).mean().unwrap();
+        
+        let mut d_loss = Array3::zeros((1, 5, 16));
+        d_loss.slice_mut(s![.., 4..5, ..]).assign(&(2.0 * (&pred_last - &y_last)));
+        
+        model.backward(d_loss);
+        optim.step(&mut model);
+        model.zero_grads();
+        
+        if e % 200 == 0 {
+            println!("epoch {e} loss {loss:.6}");
+        }
+        
+        final_loss = loss;
+    }
+
+    assert!(final_loss < 0.1, "retrieval by marker failed: loss = {}", final_loss);
+}
+
+#[test]
+fn fixed_position_retrieval() {
+    // Input: [v0, v1, v2, v3, v4, zeros]
+    // Output: [zeros, zeros, zeros, zeros, zeros, v2]
+    // 
+    // Always retrieve position 2. No marker, just "learn that position 5 copies position 2"
+    
+    let mut model = TransformerDecoder::new(16, 8, 2, vec![
+        (16, 64, Activation::Relu),
+        (64, 16, Activation::Identity)
+    ]);
+    let mut optim = AdamW::default().with(&mut model);
+    optim.learning_rate = 1e-2;
+    
+    let pe = positional_encoding_seq(6, 16).insert_axis(Axis(0));
+   
+    let mut final_loss = 0.;
+    for e in 0..2000 {
+        let vectors: Vec<Array1<f64>> = (0..5)
+            .map(|_| Array1::random(16, Uniform::new(0., 1.)))
+            .collect();
+        
+        let mut x = Array3::zeros((1, 6, 16));
+        for (i, v) in vectors.iter().enumerate() {
+            x.slice_mut(s![0, i, ..]).assign(v);
+        }
+        // Position 5 is zeros (output position)
+        
+        let x_pe = &x + &pe;
+        
+        // Target: copy position 2 to position 5
+        let mut y = Array3::zeros((1, 6, 16));
+        y.slice_mut(s![0, 5, ..]).assign(&vectors[2]);
+        
+        let mask = Array2::ones((1, 6));
+        let y_pred = model.forward(x_pe.clone(), mask, true);
+        
+        let pred_last = y_pred.slice(s![.., 5..6, ..]);
+        let y_last = y.slice(s![.., 5..6, ..]);
+        
+        let loss = (&pred_last - &y_last).mapv(|v| v * v).mean().unwrap();
+        
+        let mut d_loss = Array3::zeros((1, 6, 16));
+        d_loss.slice_mut(s![.., 5..6, ..]).assign(&(2.0 * (&pred_last - &y_last)));
+        
+        model.backward(d_loss);
+        optim.step(&mut model);
+        model.zero_grads();
+        
+        if e % 200 == 0 {
+            println!("epoch {e} loss {loss:.6}");
+        }
+
+        final_loss = loss;
+    }
+
+    assert!(final_loss < 0.1, "fixed position retrieval failed: loss = {}", final_loss);
+}
+
+#[test]
+fn delayed_copy_single_token() {
+    // Input: [v0, v1, v2, v3, v4, zeros, zeros, zeros, zeros, zeros]
+    // Output: [zeros, zeros, zeros, zeros, zeros, v0, v1, v2, v3, v4]
+    //
+    // Position 5 copies position 0
+    // Position 6 copies position 1
+    // etc.
+    
+    let mut model = TransformerDecoder::new(16, 8, 2, vec![
+        (16, 64, Activation::Relu),
+        (64, 16, Activation::Identity)
+    ]);
+    let mut optim = AdamW::default().with(&mut model);
+    optim.learning_rate = 1e-2;
+    
+    let pe = positional_encoding_seq(10, 16).insert_axis(Axis(0));
+    
+    let mut final_loss = 0.;
+    for e in 0..3000 {
+        let vectors: Vec<Array1<f64>> = (0..5)
+            .map(|_| Array1::random(16, Uniform::new(0., 1.)))
+            .collect();
+        
+        let mut x = Array3::zeros((1, 10, 16));
+        for (i, v) in vectors.iter().enumerate() {
+            x.slice_mut(s![0, i, ..]).assign(v);
+        }
+        // Positions 5-9 are zeros
+        
+        let x_pe = &x + &pe;
+        
+        // Target: positions 5-9 copy positions 0-4
+        let mut y = Array3::zeros((1, 10, 16));
+        for (i, v) in vectors.iter().enumerate() {
+            y.slice_mut(s![0, i + 5, ..]).assign(v);
+        }
+        
+        let mask = Array2::ones((1, 10));
+        let y_pred = model.forward(x_pe.clone(), mask, true);
+        
+        // Grade only output positions
+        let pred_out = y_pred.slice(s![.., 5.., ..]);
+        let y_out = y.slice(s![.., 5.., ..]);
+        
+        let loss = (&pred_out - &y_out).mapv(|v| v * v).mean().unwrap();
+        
+        let mut d_loss = Array3::zeros((1, 10, 16));
+        d_loss.slice_mut(s![.., 5.., ..]).assign(&(2.0 * (&pred_out - &y_out)));
+        
+        model.backward(d_loss);
+        optim.step(&mut model);
+        model.zero_grads();
+        
+        if e % 300 == 0 {
+            println!("epoch {e} loss {loss:.6}");
+        }
+
+        final_loss = loss; 
+    }
+
+    assert!(final_loss < 0.1, "delayed copy failed: loss = {}", final_loss);
+}
+
+#[test]
+fn memorize_one_delayed_copy() {
+    let mut model = TransformerDecoder::new(16, 8, 2, vec![
+        (16, 64, Activation::Relu),
+        (64, 16, Activation::Identity)
+    ]);
+    let mut optim = AdamW::default().with(&mut model);
+    optim.learning_rate = 1e-3;
+    
+    let pe = positional_encoding_seq(10, 16).insert_axis(Axis(0));
+    
+    // Fixed vectors - same every epoch
+    let vectors: Vec<Array1<f64>> = (0..5)
+        .map(|_| Array1::random(16, Uniform::new(0., 1.)))
+        .collect();
+    
+    let mut x = Array3::zeros((1, 10, 16));
+    for (i, v) in vectors.iter().enumerate() {
+        x.slice_mut(s![0, i, ..]).assign(v);
+    }
+    let x_pe = &x + &pe;
+    
+    let mut y = Array3::zeros((1, 10, 16));
+    for (i, v) in vectors.iter().enumerate() {
+        y.slice_mut(s![0, i + 5, ..]).assign(v);
+    }
+    
+    let mut final_loss = f64::MAX;
+    
+    for e in 0..5000 {
+        let mask = Array2::ones((1, 10));
+        let y_pred = model.forward(x_pe.clone(), mask, true);
+        
+        let pred_out = y_pred.slice(s![.., 5.., ..]);
+        let y_out = y.slice(s![.., 5.., ..]);
+        
+        let loss = (&pred_out - &y_out).mapv(|v| v * v).mean().unwrap();
+        
+        let mut d_loss = Array3::zeros((1, 10, 16));
+        d_loss.slice_mut(s![.., 5.., ..]).assign(&(2.0 * (&pred_out - &y_out)));
+        
+        model.backward(d_loss);
+        optim.step(&mut model);
+        model.zero_grads();
+        
+        if e % 500 == 0 {
+            println!("epoch {e} loss {loss:.6}");
+        }
+        
+        final_loss = loss;
+    }
+    
+    assert!(final_loss < 0.001, "failed to memorize one delayed copy: loss = {}", final_loss);
 }

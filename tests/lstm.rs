@@ -89,3 +89,66 @@ fn lstm_sequence_pred() {
         "LSTM doesnt effectively train with test loss {loss} > {max_viable_loss}"
     );
 }
+
+#[test]
+fn lstm_sequence_pred_step_forward() {
+    let batch_size = 10;
+    let seq_len = 10;
+    let features = 10;
+
+    let mut model = LSTM::new(features);
+    let mut optim = AdamW::default().with(&mut model);
+    optim.learning_rate = 1e-2;
+
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+
+    let batch = Array3::zeros((batch_size, seq_len - 2, features));
+    let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
+
+    for t in 2..batch.dim().1 {
+        let a = 0.52;
+        let b = 0.48;
+
+        let next = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
+        batch.slice_mut(s![.., t, ..]).assign(&next);
+    }
+
+    let x = batch.slice(s![.., 1..(seq_len - 1), ..]).to_owned();
+    let y = batch.slice(s![.., 2.., ..]).to_owned();
+
+    println!("x {:?} y {:?}", x.dim(), y.dim());
+
+    for e in 0..1000 {
+        let (batch_size, seq_len, features) = x.dim();
+
+        let mut h = Array2::zeros((batch_size, features));
+        let mut cell = Array2::zeros((batch_size, features));
+        let mut y_pred = Array3::zeros((batch_size, seq_len, features));
+
+        for i in 0..seq_len {
+            let x_t = x.slice(s![.., i, ..]).to_owned();
+            model.step_forward(&x_t, &mut h, &mut cell);
+
+            y_pred.slice_mut(s![.., i, ..]).assign(&h);
+        }
+
+        let d_loss = 2. * (&y_pred - &y);
+        let loss = (&y_pred - &y).powi(2).mean().unwrap();
+        println!("{e} loss={loss}");
+
+        model.backward(d_loss);
+        model.forward(Array3::zeros((0, 0, features)), false);
+        optim.step(&mut model);
+
+        model.zero_grads();
+    }
+
+    let y_pred = model.forward(x.clone(), true);
+    let loss = (&y_pred - &y).powi(2).mean().unwrap();
+
+    let max_viable_loss = 0.01;
+    assert!(
+        loss < max_viable_loss,
+        "LSTM doesnt effectively train with step forward, test loss {loss} > {max_viable_loss}"
+    );
+}
