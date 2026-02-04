@@ -118,7 +118,7 @@ pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
 pub fn cross_entropy_loss(probs: &Array3<f64>, targets: &Array3<f64>) -> f64 {
     let log_probs = probs.mapv(|p| p.max(1e-10).ln());
     let loss = -(targets * &log_probs).sum() / (probs.dim().0 * probs.dim().1) as f64;
-    
+
     loss
 }
 

@@ -1,13 +1,13 @@
 use nbml::{
     f::Activation,
-    nn::{FFN, SequencePooling, TransformerEncoder},
+    nn::{FFN, SequencePooling, Transformer},
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, stack};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 struct Classifier {
-    transformer: TransformerEncoder,
+    transformer: Transformer,
     pooling: SequencePooling,
     feed_forward: FFN,
 }
@@ -15,7 +15,7 @@ struct Classifier {
 impl Classifier {
     pub fn new(d_model: usize, d_head: usize, n_head: usize) -> Self {
         Self {
-            transformer: TransformerEncoder::new(
+            transformer: Transformer::new_encoder(
                 d_model,
                 d_head,
                 n_head,
@@ -161,6 +161,7 @@ fn main() {
 
         // Update weights
         optim.step(&mut model);
+        model.zero_grads();
 
         // Track best loss
         if loss < best_loss {

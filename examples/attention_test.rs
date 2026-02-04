@@ -1,5 +1,7 @@
+#![allow(deprecated)]
+
 use nbml::{
-    nn::attention::AttentionHead,
+    nn::attention_head::AttentionHead,
     optim::{adam::AdamW, optimizer::Optimizer},
 };
 use ndarray::{Array1, Array2, Array3, Axis};

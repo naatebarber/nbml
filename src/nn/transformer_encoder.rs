@@ -1,9 +1,11 @@
+#![allow(deprecated)]
+
 use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 
 use crate::optim::param::ToParams;
 
-use super::attention::AttentionHead;
+use super::attention_head::AttentionHead;
 use super::ffn::{FFN, LayerDef};
 use super::layernorm::LayerNorm;
 

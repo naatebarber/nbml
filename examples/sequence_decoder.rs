@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use nbml::{
     f::Activation,
     nn::TransformerDecoder,
