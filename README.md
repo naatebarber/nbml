@@ -44,15 +44,20 @@ for batch in training_data {
 
 - **`Layer`**: Single nonlinear projection layer
 - **`FFN`**: Feedforward network with configurable layers
-- **`LSTM`**: Long Short-Term Memory with merged weight matrices
+- **`LSTM`**: Long Short-Term Memory Network
 - **`RNN`**: Vanilla recurrent neural network
 - **`LayerNorm`**: Layer normalization
 - **`Pooling`**: Sequence mean-pooling
-- **`AttentionHead`**: Multi-head self-attention mechanism
-- **`TransformerEncoder`**: Pre-norm transformer encoder
-- **`TransformerDecoder`**: Pre-norm transformer decoder
 - **`Conv2D`**: Explicit Im2Col Conv2D layer (CPU efficient, memory hungry)
 - **`PatchwiseConv2D`**: Patchwise Conv2D layer (CPU hungry, memory efficient)
+- **`LinearSSM`**: Discrete Linear SSM
+- **`Attention`**: Core attention primitive
+- **`SelfAttention`**: Multi-head self attention
+- **`CrossAttention`**: Multi-head cross attention
+- **`Transformer`**: Transformer encoder/decoder block
+- **`AttentionHead`**: Multi-head self-attention mechanism (dep, use `SelfAttention`)
+- **`TransformerEncoder`**: Pre-norm transformer encoder (dep, use `Transformer::new_encoder()`)
+- **`TransformerDecoder`**: Pre-norm transformer decoder (dep, use `Transformer::new_decoder()`)
 
 ### Optimizers (`nbml::optim`)
 
@@ -145,7 +150,7 @@ Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
 
 ### Custom LSTM Training
 ```rust
-use nbml::layers::lstm::LSTM;
+use nbml::nn::LSTM;
 use nbml::optim::adam::Adam;
 
 let mut lstm = LSTM::new(
@@ -167,9 +172,9 @@ for batch in data {
 
 ### Multi-Head Attention
 ```rust
-use nbml::layers::attention::AttentionHead;
+use nbml::nn::SelfAttention;
 
-let mut attention = AttentionHead::new(
+let mut attention = SelfAttention::new(
     512,  // d_in
     64,   // d_head
     8     // n_head
@@ -177,14 +182,41 @@ let mut attention = AttentionHead::new(
 
 // where input.dim() is (batch_size, seq_len, features)
 // features == d_in == (512 in this case)
-// and mask == (batch_size, seq_len)
+// and mask == (batch_size, seq_len, seq_len)
 // with each element as 1. or 0. depending on whether or not the token
 // is padding
 
 let output = attention.forward(
     input, // (batch_size, seq_len, features)
-    mask,  // binary mask, (batch_size, seq_len)
-    false,  // include causal mask (is this a decoder?)
+    mask,  // binary mask, (batch_size, seq_len, seq_len)
     true    // grad
 );
+```
+
+### Transformer Decoder
+```rust
+use nbml::nn::Transformer;
+use nbml::f::Activation;
+use nbml::ndarray::Array3;
+
+let mut transformer = Transformer::new_decoder(
+    512,  // d_in
+    64,   // d_head
+    8,    // n_head
+    vec![ // feedforward network layer definition
+        (512, 512 * 4, Activation::Relu),
+        (512 * 4, 512, Activation::Identity)
+    ]
+);
+
+let y_pred = transformer.forward(
+    input, // (batch_size, seq_len, features)
+    mask,  // binary mask, (batch_size, seq_len, seq_len)
+    true    // grad
+);
+
+// some bs.
+let d_y_pred = Array3::ones(y_pred.dim());
+transformer.backward(d_y_pred);
+transformer.zero_grads();
 ```
