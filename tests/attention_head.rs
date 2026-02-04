@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use nbml::{
     nn::AttentionHead,
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},

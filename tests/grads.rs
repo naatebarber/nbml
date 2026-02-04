@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use nbml::{
     nn::{AttentionHead, LayerNorm},
     optim::param::ToParams,
