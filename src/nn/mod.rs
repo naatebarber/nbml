@@ -19,7 +19,6 @@ pub use attention::*;
 #[allow(deprecated)]
 pub use attention_head::*;
 pub use conv2d::*;
-pub use experimental::*;
 pub use ffn::*;
 pub use layernorm::*;
 pub use linear_ssm::*;

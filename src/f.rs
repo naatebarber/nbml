@@ -43,6 +43,20 @@ pub fn d_exp(x: &Array2<f64>) -> Array2<f64> {
     x.exp()
 }
 
+pub fn elu(x: &Array2<f64>) -> Array2<f64> {
+    let x_pos = x.clamp(0., f64::MAX);
+    let x_neg = x.clamp(f64::MIN, 0.);
+
+    &x_pos + (x_neg.exp() - 1.)
+}
+
+pub fn d_elu(x: &Array2<f64>) -> Array2<f64> {
+    let x_pos = x.clamp(0., f64::MAX);
+    let x_neg = x.clamp(f64::MIN, 0.);
+
+    &x_pos.signum() + x_neg.exp()
+}
+
 pub fn softplus(x: &Array2<f64>) -> Array2<f64> {
     x.mapv(|v| if v > 20.0 { v } else { (1.0 + v.exp()).ln() })
 }
