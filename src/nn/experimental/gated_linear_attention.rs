@@ -1,17 +1,9 @@
-use ndarray::{Array1, Array2, Array3, Array4, Axis, s, stack};
+use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
 
 use crate::{
     f,
     optim::param::{Param, ToParams},
 };
-
-// TODO
-// instead of my forget gate being a vector that i broadcast across rows of state, do the canonical
-// GLA thing and make w_alpha and w_beta. in my case i can just fuse them into w_forget of size
-// (d_in, 2 * d_head) and slice down the middle, producing fused alpha and beta.
-//
-// then take the alpha and beta, each of (B, d_head) compute outer product resulting in
-// (B, d_head, d_head) apply this directly to state elementwise.
 
 pub struct GatedLinearAttention {
     d_in: usize,
@@ -49,8 +41,8 @@ impl GatedLinearAttention {
 
             w_qkv: f::xavier_normal((d_in, 3 * d_head)),
             b_qkv: Array1::zeros(3 * d_head),
-            w_forget: f::xavier_normal((d_in, d_head)),
-            b_forget: Array1::from_elem(d_head, 1.),
+            w_forget: f::xavier_normal((d_in, 2 * d_head)),
+            b_forget: Array1::from_elem(2 * d_head, 1.),
             w_o: f::xavier_normal((d_head, d_in)),
             b_o: Array1::zeros(d_in),
 
@@ -94,7 +86,7 @@ impl GatedLinearAttention {
         let forget_gates_2d = f::sigmoid(&forget_2d);
 
         let forget_gates = forget_gates_2d
-            .into_shape_clone((batch_size, seq_len, self.d_head))
+            .into_shape_clone((batch_size, seq_len, 2 * self.d_head))
             .unwrap();
 
         self.x_2d = if grad { x_2d } else { Array2::zeros((0, 0)) };
@@ -143,15 +135,18 @@ impl GatedLinearAttention {
             let k_t = k.slice(s![.., t, ..]); // (B, d_k)
             let v_t = v.slice(s![.., t, ..]); // (B, d_v)
 
-            let forget_gate_t = forget_gates.slice(s![.., t, ..]).insert_axis(Axis(2));
+            let forget_gate_t = forget_gates.slice(s![.., t, ..]);
+            let forget_alpha = forget_gate_t.slice(s![.., 0..self.d_head]);
+            let forget_beta = forget_gate_t.slice(s![.., self.d_head..]);
+            let forget_expanded =
+                &forget_alpha.insert_axis(Axis(2)) * &forget_beta.insert_axis(Axis(1));
 
-            // leverage broadcasting trick
             // (B, d_k, 1) * (B, 1, d_v) -> (B, d_k, d_v)
             let k_t_inner = k_t.insert_axis(Axis(2));
             let v_t_outer = v_t.insert_axis(Axis(1));
             let kv = &k_t_inner * &v_t_outer;
 
-            state = &state * &forget_gate_t + &kv;
+            state = &state * &forget_expanded + &kv;
 
             // (B, d_q) -> (B, d_q, 1)
             let q_t_inner = q_t.insert_axis(Axis(2));
@@ -222,7 +217,7 @@ impl GatedLinearAttention {
         let mut d_loss_v = Array3::zeros((batch_size, seq_len, d_v));
 
         let mut d_loss_state = Array3::zeros((batch_size, d_k, d_v));
-        let mut d_loss_forget = Array3::zeros((batch_size, seq_len, self.d_head));
+        let mut d_loss_forget = Array3::zeros((batch_size, seq_len, 2 * self.d_head));
 
         for t in (0..seq_len).rev() {
             let d_loss_t = d_attn.slice(s![.., t, ..]); // (B, d_v)
@@ -231,7 +226,12 @@ impl GatedLinearAttention {
             let q_t = self.q.slice(s![.., t, ..]); // (B, d_q)
             let k_t = self.k.slice(s![.., t, ..]); // (B, d_k)
             let v_t = self.v.slice(s![.., t, ..]); // (B, d_v)
-            let forget_gate_t = self.forget_gates.slice(s![.., t, ..]); // (B, d_v)
+
+            let forget_gate_t = self.forget_gates.slice(s![.., t, ..]); // (B, dv)
+            let forget_alpha = forget_gate_t.slice(s![.., 0..self.d_head]);
+            let forget_beta = forget_gate_t.slice(s![.., self.d_head..]);
+            let forget_expanded_t =
+                &forget_alpha.insert_axis(Axis(2)) * &forget_beta.insert_axis(Axis(1));
 
             // (B, d_v) -> (B, 1, d_v)
             let d_loss_t = d_loss_t.to_owned().insert_axis(Axis(1));
@@ -247,8 +247,14 @@ impl GatedLinearAttention {
             // S' = f * S + k.dot(v.T)
             d_loss_state += &(&q_t.insert_axis(Axis(2)) * &d_loss_t);
 
-            // update forget gate
-            let d_forget_t = (&d_loss_state * &state_prev).sum_axis(Axis(2));
+            // TODO update forget gate
+            // (B, d_k, d_v)
+            let d_forget_expanded = &d_loss_state * &state_prev;
+            let d_forget_alpha =
+                (&d_forget_expanded * &forget_beta.insert_axis(Axis(1))).sum_axis(Axis(2));
+            let d_forget_beta =
+                (&d_forget_expanded * &forget_alpha.insert_axis(Axis(2))).sum_axis(Axis(1));
+            let d_forget_t = concatenate![Axis(1), d_forget_alpha.view(), d_forget_beta.view()];
             d_loss_forget.slice_mut(s![.., t, ..]).assign(&d_forget_t);
 
             // (B, d_v) -> (B, 1, d_v)
@@ -264,12 +270,12 @@ impl GatedLinearAttention {
             d_loss_v.slice_mut(s![.., t, ..]).assign(&d_loss_v_t);
 
             // pass state backward modified based on forget gate
-            d_loss_state = &d_loss_state * &forget_gate_t.insert_axis(Axis(2));
+            d_loss_state = &d_loss_state * &forget_expanded_t;
         }
 
         let d_z_forget = f::d_sigmoid(&self.forget_2d);
         let d_loss_forget_2d = d_loss_forget
-            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .into_shape_clone((batch_size * seq_len, 2 * self.d_head))
             .unwrap()
             * &d_z_forget;
         self.d_w_forget += &(self.x_2d.t().dot(&d_loss_forget_2d));
