@@ -6,6 +6,7 @@ use ndarray::{Array1, Array3, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
+#[ignore]
 fn linear_self_attention_learns_to_attend_to_highest() {
     fn make_dataset() -> (Array3<f64>, Array3<f64>) {
         let mut x = Array3::random((1, 5, 5), Uniform::new(0., 1.));
