@@ -5,6 +5,14 @@ use crate::{
     optim::param::{Param, ToParams},
 };
 
+// TODO
+// instead of my forget gate being a vector that i broadcast across rows of state, do the canonical
+// GLA thing and make w_alpha and w_beta. in my case i can just fuse them into w_forget of size
+// (d_in, 2 * d_head) and slice down the middle, producing fused alpha and beta.
+//
+// then take the alpha and beta, each of (B, d_head) compute outer product resulting in
+// (B, d_head, d_head) apply this directly to state elementwise.
+
 pub struct GatedLinearAttention {
     d_in: usize,
     d_head: usize,
@@ -13,8 +21,6 @@ pub struct GatedLinearAttention {
     b_qkv: Array1<f64>,
     w_forget: Array2<f64>,
     b_forget: Array1<f64>,
-    w_select: Array2<f64>,
-    b_select: Array1<f64>,
     w_o: Array2<f64>,
     b_o: Array1<f64>,
 
@@ -23,19 +29,14 @@ pub struct GatedLinearAttention {
     k: Array3<f64>,
     v: Array3<f64>,
     forget_2d: Array2<f64>,
-    select_2d: Array2<f64>,
     forget_gates: Array3<f64>,
-    select_gates_2d: Array2<f64>,
     states: Array4<f64>,
     attn_2d: Array2<f64>,
-    attn_2d_selected: Array2<f64>,
 
     d_w_qkv: Array2<f64>,
     d_b_qkv: Array1<f64>,
     d_w_forget: Array2<f64>,
     d_b_forget: Array1<f64>,
-    d_w_select: Array2<f64>,
-    d_b_select: Array1<f64>,
     d_w_o: Array2<f64>,
     d_b_o: Array1<f64>,
 }
@@ -50,8 +51,6 @@ impl GatedLinearAttention {
             b_qkv: Array1::zeros(3 * d_head),
             w_forget: f::xavier_normal((d_in, d_head)),
             b_forget: Array1::from_elem(d_head, 1.),
-            w_select: f::xavier_normal((d_in, d_head)),
-            b_select: Array1::from_elem(d_head, 0.),
             w_o: f::xavier_normal((d_head, d_in)),
             b_o: Array1::zeros(d_in),
 
@@ -60,19 +59,14 @@ impl GatedLinearAttention {
             k: Array3::zeros((0, 0, 0)),
             v: Array3::zeros((0, 0, 0)),
             forget_2d: Array2::zeros((0, 0)),
-            select_2d: Array2::zeros((0, 0)),
             forget_gates: Array3::zeros((0, 0, 0)),
-            select_gates_2d: Array2::zeros((0, 0)),
             states: Array4::zeros((0, 0, 0, 0)),
             attn_2d: Array2::zeros((0, 0)),
-            attn_2d_selected: Array2::zeros((0, 0)),
 
             d_w_qkv: Array2::zeros((0, 0)),
             d_b_qkv: Array1::zeros(0),
             d_w_forget: Array2::zeros((0, 0)),
             d_b_forget: Array1::zeros(0),
-            d_w_select: Array2::zeros((0, 0)),
-            d_b_select: Array1::zeros(0),
             d_w_o: Array2::zeros((0, 0)),
             d_b_o: Array1::zeros(0),
         }
@@ -97,10 +91,7 @@ impl GatedLinearAttention {
         let v = qkv.slice(s![2, .., .., ..]);
 
         let forget_2d = x_2d.dot(&self.w_forget) + &self.b_forget;
-        let select_2d = x_2d.dot(&self.w_select) + &self.b_select;
-
         let forget_gates_2d = f::sigmoid(&forget_2d);
-        let select_gates_2d = f::sigmoid(&select_2d);
 
         let forget_gates = forget_gates_2d
             .into_shape_clone((batch_size, seq_len, self.d_head))
@@ -132,22 +123,10 @@ impl GatedLinearAttention {
             Array2::zeros((0, 0))
         };
 
-        self.select_2d = if grad {
-            select_2d
-        } else {
-            Array2::zeros((0, 0))
-        };
-
         self.forget_gates = if grad {
             forget_gates.clone()
         } else {
             Array3::zeros((0, 0, 0))
-        };
-
-        self.select_gates_2d = if grad {
-            select_gates_2d.clone()
-        } else {
-            Array2::zeros((0, 0))
         };
 
         self.states = if grad {
@@ -189,19 +168,12 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size * seq_len, self.d_head))
             .unwrap();
 
-        let attn_2d_selected = &attn_2d * &select_gates_2d;
-
-        let output_2d = attn_2d_selected.dot(&self.w_o) + &self.b_o;
+        let output_2d = attn_2d.dot(&self.w_o) + &self.b_o;
         let output = output_2d
             .into_shape_clone((batch_size, seq_len, self.d_in))
             .unwrap();
 
         self.attn_2d = if grad { attn_2d } else { Array2::zeros((0, 0)) };
-        self.attn_2d_selected = if grad {
-            attn_2d_selected
-        } else {
-            Array2::zeros((0, 0))
-        };
 
         output
     }
@@ -216,14 +188,6 @@ impl GatedLinearAttention {
 
         if self.d_b_o.dim() == 0 {
             self.d_b_o = Array1::zeros(self.b_o.dim())
-        }
-
-        if self.d_w_select.dim() == (0, 0) {
-            self.d_w_select = Array2::zeros(self.w_select.dim());
-        }
-
-        if self.d_b_select.dim() == 0 {
-            self.d_b_select = Array1::zeros(self.b_select.dim());
         }
 
         if self.d_w_forget.dim() == (0, 0) {
@@ -248,22 +212,7 @@ impl GatedLinearAttention {
         self.d_w_o += &(self.attn_2d.t().dot(&d_loss_2d));
         self.d_b_o += &d_loss_2d.sum_axis(Axis(0));
 
-        let d_o = d_loss_2d.dot(&self.w_o.t());
-
-        // update the select gate
-
-        let d_z_select = f::d_sigmoid(&self.select_2d);
-        let d_loss_select = &d_o * &self.attn_2d * &d_z_select;
-        self.d_w_select += &(self.x_2d.t().dot(&d_loss_select));
-        self.d_b_select += &d_loss_select.sum_axis(Axis(0));
-        let d_x_select_2d = d_loss_select.dot(&self.w_select.t());
-        let d_x_select = d_x_select_2d
-            .into_shape_clone((batch_size, seq_len, self.d_in))
-            .unwrap();
-
-        // undo the select gate contribution
-
-        let d_attn_2d = &d_o * &self.select_gates_2d;
+        let d_attn_2d = d_loss_2d.dot(&self.w_o.t());
         let d_attn = d_attn_2d
             .into_shape_clone((batch_size, seq_len, self.d_head))
             .unwrap();
@@ -346,7 +295,7 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size, seq_len, self.d_in))
             .unwrap();
 
-        d_x_qkv + d_x_forget + d_x_select
+        d_x_qkv + d_x_forget
     }
 }
 
@@ -357,8 +306,6 @@ impl ToParams for GatedLinearAttention {
             Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.d_b_qkv),
             Param::matrix(&mut self.w_forget).with_matrix_grad(&mut self.d_w_forget),
             Param::vector(&mut self.b_forget).with_vector_grad(&mut self.d_b_forget),
-            Param::matrix(&mut self.w_select).with_matrix_grad(&mut self.d_w_select),
-            Param::vector(&mut self.b_select).with_vector_grad(&mut self.d_b_select),
             Param::matrix(&mut self.w_o).with_matrix_grad(&mut self.d_w_o),
             Param::vector(&mut self.b_o).with_vector_grad(&mut self.d_b_o),
         ]
