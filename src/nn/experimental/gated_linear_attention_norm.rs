@@ -1,9 +1,15 @@
 use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
 
 use crate::{
-    f,
-    optim::param::{Param, ToParams},
+    f, nn::LayerNorm, optim::param::{Param, ToParams}
 };
+
+// TODO
+// make multiheaded. easy since attention only loops over sequence
+// multihead is just a projection problem, heads added to batch dim
+//
+// TODO
+// cross attention variant
 
 pub struct GatedLinearAttention {
     d_in: usize,
@@ -11,6 +17,7 @@ pub struct GatedLinearAttention {
 
     w_qkv: Array2<f64>,
     b_qkv: Array1<f64>,
+    layernorm: LayerNorm,
     w_forget: Array2<f64>,
     b_forget: Array1<f64>,
     w_o: Array2<f64>,
@@ -41,6 +48,7 @@ impl GatedLinearAttention {
 
             w_qkv: f::xavier_normal((d_in, 3 * d_head)),
             b_qkv: Array1::zeros(3 * d_head),
+            layernorm: LayerNorm::new(3 * d_head),
             w_forget: f::xavier_normal((d_in, 2 * d_head)),
             b_forget: Array1::from_elem(2 * d_head, 1.),
             w_o: f::xavier_normal((d_head, d_in)),
@@ -72,7 +80,8 @@ impl GatedLinearAttention {
             .unwrap();
 
         let qkv_2d = x_2d.dot(&self.w_qkv) + &self.b_qkv;
-        let qkv = qkv_2d
+        let qkv_prenorm = qkv_2d.into_shape_clone((batch_size, seq_len, 3 * self.d_head)).unwrap();
+        let qkv = self.layernorm.forward(qkv_prenorm, grad)
             .into_shape_clone((batch_size, seq_len, 3, self.d_head))
             .unwrap()
             .permuted_axes([2, 0, 1, 3])
@@ -285,12 +294,22 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size, seq_len, self.d_in))
             .unwrap();
 
-        // (3, B, S, D) -> (B, S, 3, D)
-        let d_loss_qkv = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
+        let d_loss_qkv_postnorm = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
             .permuted_axes([1, 2, 0, 3])
             .to_owned()
+            .into_shape_clone((batch_size, seq_len, 3 * self.d_head))
+            .unwrap();
+
+        let d_loss_qkv = self.layernorm.backward(d_loss_qkv_postnorm)
             .into_shape_clone((batch_size * seq_len, 3 * self.d_head))
             .unwrap();
+
+        // (3, B, S, D) -> (B, S, 3, D)
+        // let d_loss_qkv = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
+        //     .permuted_axes([1, 2, 0, 3])
+        //     .to_owned()
+        //     .into_shape_clone((batch_size * seq_len, 3 * self.d_head))
+        //     .unwrap();
 
         self.d_w_qkv += &(self.x_2d.t().dot(&d_loss_qkv));
         self.d_b_qkv += &d_loss_qkv.sum_axis(Axis(0));
@@ -307,13 +326,17 @@ impl GatedLinearAttention {
 
 impl ToParams for GatedLinearAttention {
     fn params(&mut self) -> Vec<crate::optim::param::Param> {
-        vec![
+        let mut params = vec![
             Param::matrix(&mut self.w_qkv).with_matrix_grad(&mut self.d_w_qkv),
             Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.d_b_qkv),
             Param::matrix(&mut self.w_forget).with_matrix_grad(&mut self.d_w_forget),
             Param::vector(&mut self.b_forget).with_vector_grad(&mut self.d_b_forget),
             Param::matrix(&mut self.w_o).with_matrix_grad(&mut self.d_w_o),
             Param::vector(&mut self.b_o).with_vector_grad(&mut self.d_b_o),
-        ]
+        ];
+
+        params.append(&mut self.layernorm.params());
+
+        params
     }
 }

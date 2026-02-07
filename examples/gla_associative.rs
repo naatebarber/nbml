@@ -3,7 +3,7 @@ use std::time::Instant;
 use nbml::{
     ndarray::{Array2, Array3, Axis, s},
     ndarray_rand::{RandomExt, rand_distr::Uniform},
-    nn::experimental::gated_linear_attention::GatedLinearAttention,
+    nn::GatedLinearAttention,
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 use rand::Rng;
