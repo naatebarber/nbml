@@ -1,4 +1,5 @@
 use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
@@ -12,6 +13,7 @@ use crate::{
 // TODO
 // cross attention variant
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GatedLinearAttention {
     d_in: usize,
     d_head: usize,
