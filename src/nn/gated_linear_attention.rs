@@ -15,6 +15,7 @@ use crate::{
 pub struct GatedLinearAttention {
     d_in: usize,
     d_head: usize,
+    n_head: usize,
 
     w_qkv: Array2<f64>,
     b_qkv: Array1<f64>,
@@ -41,16 +42,17 @@ pub struct GatedLinearAttention {
 }
 
 impl GatedLinearAttention {
-    pub fn new(d_in: usize, d_head: usize) -> Self {
+    pub fn new(d_in: usize, d_head: usize, n_head: usize) -> Self {
         Self {
             d_in,
             d_head,
+            n_head,
 
-            w_qkv: f::xavier_normal((d_in, 3 * d_head)),
-            b_qkv: Array1::zeros(3 * d_head),
-            w_forget: f::xavier_normal((d_in, 2 * d_head)),
-            b_forget: Array1::from_elem(2 * d_head, 1.),
-            w_o: f::xavier_normal((d_head, d_in)),
+            w_qkv: f::xavier_normal((d_in, 3 * n_head * d_head)),
+            b_qkv: Array1::zeros(3 * n_head * d_head),
+            w_forget: f::xavier_normal((d_in, n_head * 2 * d_head)),
+            b_forget: Array1::from_elem(n_head * 2 * d_head, 1.),
+            w_o: f::xavier_normal((n_head * d_head, d_in)),
             b_o: Array1::zeros(d_in),
 
             x_2d: Array2::zeros((0, 0)),
@@ -80,10 +82,12 @@ impl GatedLinearAttention {
 
         let qkv_2d = x_2d.dot(&self.w_qkv) + &self.b_qkv;
         let qkv = qkv_2d
-            .into_shape_clone((batch_size, seq_len, 3, self.d_head))
+            .into_shape_clone((batch_size, seq_len, 3, self.n_head, self.d_head))
             .unwrap()
-            .permuted_axes([2, 0, 1, 3])
-            .to_owned();
+            .permuted_axes([2, 0, 3, 1, 4]) // (3, B, nH, S, dH)
+            .to_owned()
+            .into_shape_clone((3, batch_size * self.n_head, seq_len, self.d_head))
+            .unwrap();
 
         let q = qkv.slice(s![0, .., .., ..]);
         let k = qkv.slice(s![1, .., .., ..]);
@@ -93,7 +97,10 @@ impl GatedLinearAttention {
         let forget_gates_2d = f::sigmoid(&forget_2d);
 
         let forget_gates = forget_gates_2d
-            .into_shape_clone((batch_size, seq_len, 2 * self.d_head))
+            .into_shape_clone((batch_size, seq_len, self.n_head, 2 * self.d_head))
+            .unwrap()
+            .permuted_axes([0, 2, 1, 3])
+            .into_shape_clone((batch_size * self.n_head, seq_len, 2 * self.d_head))
             .unwrap();
 
         self.x_2d = if grad { x_2d } else { Array2::zeros((0, 0)) };
@@ -129,13 +136,18 @@ impl GatedLinearAttention {
         };
 
         self.states = if grad {
-            Array4::zeros((seq_len + 1, batch_size, self.d_head, self.d_head))
+            Array4::zeros((
+                seq_len + 1,
+                batch_size * self.n_head,
+                self.d_head,
+                self.d_head,
+            ))
         } else {
             Array4::zeros((0, 0, 0, 0))
         };
 
-        let mut state = Array3::zeros((batch_size, self.d_head, self.d_head));
-        let mut attn = Array3::zeros((batch_size, seq_len, self.d_head));
+        let mut state = Array3::zeros((batch_size * self.n_head, self.d_head, self.d_head));
+        let mut attn = Array3::zeros((batch_size * self.n_head, seq_len, self.d_head));
 
         for t in 0..seq_len {
             let q_t = q.slice(s![.., t, ..]);
@@ -167,7 +179,10 @@ impl GatedLinearAttention {
         }
 
         let attn_2d = attn
-            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .into_shape_clone((batch_size, self.n_head, seq_len, self.d_head))
+            .unwrap()
+            .permuted_axes([0, 2, 1, 3])
+            .into_shape_clone((batch_size * seq_len, self.n_head * self.d_head))
             .unwrap();
 
         let output_2d = attn_2d.dot(&self.w_o) + &self.b_o;
@@ -214,17 +229,20 @@ impl GatedLinearAttention {
         self.d_w_o += &(self.attn_2d.t().dot(&d_loss_2d));
         self.d_b_o += &d_loss_2d.sum_axis(Axis(0));
 
-        let d_attn_2d = d_loss_2d.dot(&self.w_o.t());
-        let d_attn = d_attn_2d
-            .into_shape_clone((batch_size, seq_len, self.d_head))
+        let d_attn = d_loss_2d
+            .dot(&self.w_o.t())
+            .into_shape_clone((batch_size, seq_len, self.n_head, self.d_head))
+            .unwrap()
+            .permuted_axes([0, 2, 1, 3])
+            .into_shape_clone((batch_size * self.n_head, seq_len, self.d_head))
             .unwrap();
 
-        let mut d_loss_q = Array3::zeros((batch_size, seq_len, self.d_head));
-        let mut d_loss_k = Array3::zeros((batch_size, seq_len, d_k));
-        let mut d_loss_v = Array3::zeros((batch_size, seq_len, d_v));
+        let mut d_loss_q = Array3::zeros((batch_size * self.n_head, seq_len, self.d_head));
+        let mut d_loss_k = Array3::zeros((batch_size * self.n_head, seq_len, d_k));
+        let mut d_loss_v = Array3::zeros((batch_size * self.n_head, seq_len, d_v));
 
-        let mut d_loss_state = Array3::zeros((batch_size, d_k, d_v));
-        let mut d_loss_forget = Array3::zeros((batch_size, seq_len, 2 * self.d_head));
+        let mut d_loss_state = Array3::zeros((batch_size * self.n_head, d_k, d_v));
+        let mut d_loss_forget = Array3::zeros((batch_size * self.n_head, seq_len, 2 * self.d_head));
 
         for t in (0..seq_len).rev() {
             let d_loss_t = d_attn.slice(s![.., t, ..]); // (B, d_v)
@@ -282,9 +300,13 @@ impl GatedLinearAttention {
 
         let d_z_forget = f::d_sigmoid(&self.forget_2d);
         let d_loss_forget_2d = d_loss_forget
-            .into_shape_clone((batch_size * seq_len, 2 * self.d_head))
+            .into_shape_clone((batch_size, self.n_head, seq_len, 2 * self.d_head))
+            .unwrap()
+            .permuted_axes([0, 2, 1, 3])
+            .into_shape_clone((batch_size * seq_len, self.n_head * 2 * self.d_head))
             .unwrap()
             * &d_z_forget;
+
         self.d_w_forget += &(self.x_2d.t().dot(&d_loss_forget_2d));
         self.d_b_forget += &d_loss_forget_2d.sum_axis(Axis(0));
         let d_x_forget_2d = d_loss_forget_2d.dot(&self.w_forget.t());
@@ -292,11 +314,12 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size, seq_len, self.d_in))
             .unwrap();
 
-        // (3, B, S, D) -> (B, S, 3, D)
+        // (3, B * nH, S, D) -> (B * S, 3 * nH * D)
         let d_loss_qkv = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
-            .permuted_axes([1, 2, 0, 3])
-            .to_owned()
-            .into_shape_clone((batch_size * seq_len, 3 * self.d_head))
+            .into_shape_clone((3, batch_size, self.n_head, seq_len, self.d_head))
+            .unwrap()
+            .permuted_axes([1, 3, 0, 2, 4])
+            .into_shape_clone((batch_size * seq_len, 3 * self.n_head * self.d_head))
             .unwrap();
 
         self.d_w_qkv += &(self.x_2d.t().dot(&d_loss_qkv));

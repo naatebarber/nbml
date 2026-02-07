@@ -95,7 +95,7 @@ pub fn selective_copy() {
     println!("d_model {d_model} seq_len {}", 2 * pattern_len + delay);
     let start = Instant::now();
 
-    let mut model = GatedLinearAttention::new(d_model, 2 * d_model);
+    let mut model = GatedLinearAttention::new(d_model, 2 * d_model, 4);
     let mut optim = AdamW::default().with(&mut model);
 
     let epochs = EPOCHS;
