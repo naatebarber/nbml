@@ -55,7 +55,7 @@ for batch in training_data {
 - **`SelfAttention`**: Multi-head self attention
 - **`CrossAttention`**: Multi-head cross attention
 - **`Transformer`**: Transformer encoder/decoder block
-- **`GatedLinearAttention`**: Gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
+- **`GatedLinearAttention`**: Multi-head gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
 - **`AttentionHead`**: Multi-head self-attention mechanism (dep, use `SelfAttention`)
 - **`TransformerEncoder`**: Pre-norm transformer encoder (dep, use `Transformer::new_encoder()`)
 - **`TransformerDecoder`**: Pre-norm transformer decoder (dep, use `Transformer::new_decoder()`)
