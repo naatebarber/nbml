@@ -1,10 +1,12 @@
 use ndarray::{Array1, Array2, Array3, Axis, concatenate, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::param::{Param, ToParams},
+    optim::{cache::Cache, param::{Param, ToParams}},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LSTM {
     d_model: usize,
 
@@ -12,11 +14,8 @@ pub struct LSTM {
     w_r: Array2<f64>,
     b: Array1<f64>,
 
-    x: Array3<f64>,
-    states: Array3<f64>,
-    preactivations: Array3<f64>,
-    gates: Array3<f64>,
-    cells: Array3<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     d_wi: Array2<f64>,
     d_wr: Array2<f64>,
@@ -36,11 +35,7 @@ impl LSTM {
                 Array1::zeros(d_model * 3).view()
             ],
 
-            x: Array3::zeros((0, 0, 0)),
-            states: Array3::zeros((0, 0, 0)),
-            preactivations: Array3::zeros((0, 0, 0)),
-            gates: Array3::zeros((0, 0, 0)),
-            cells: Array3::zeros((0, 0, 0)),
+            cache: Cache::new(),
 
             d_wi: Array2::zeros((0, 0)),
             d_wr: Array2::zeros((0, 0)),
@@ -57,35 +52,13 @@ impl LSTM {
         let mut cell = Array2::zeros((batch_size, features));
         let mut output = Array3::zeros(x.dim());
 
-        self.x = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.preactivations = if grad {
-            Array3::zeros((seq_len, batch_size, 4 * features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.gates = if grad {
-            Array3::zeros((seq_len, batch_size, 4 * features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.cells = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
+        if grad {
+            self.cache.set("x", Array3::<f64>::zeros((seq_len, batch_size, features)));
+            self.cache.set("states", Array3::<f64>::zeros((seq_len, batch_size, features)));
+            self.cache.set("preactivations", Array3::<f64>::zeros((seq_len, batch_size, 4 * features)));
+            self.cache.set("gates", Array3::<f64>::zeros((seq_len, batch_size, 4 * features)));
+            self.cache.set("cells", Array3::<f64>::zeros((seq_len, batch_size, features)));
+        }
 
         for t in 0..seq_len {
             let x_t = x.slice(s![.., t, ..]);
@@ -109,9 +82,9 @@ impl LSTM {
                 f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
 
             if grad {
-                self.x.slice_mut(s![t, .., ..]).assign(&x_t);
-                self.states.slice_mut(s![t, .., ..]).assign(&state);
-                self.preactivations
+                self.cache.get_mut::<Array3<f64>>("x").slice_mut(s![t, .., ..]).assign(&x_t);
+                self.cache.get_mut::<Array3<f64>>("states").slice_mut(s![t, .., ..]).assign(&state);
+                self.cache.get_mut::<Array3<f64>>("preactivations")
                     .slice_mut(s![t, .., ..])
                     .assign(&preactivatons);
                 let gates = concatenate![
@@ -121,8 +94,8 @@ impl LSTM {
                     cell_gate.view(),
                     output_gate.view()
                 ];
-                self.gates.slice_mut(s![t, .., ..]).assign(&gates);
-                self.cells.slice_mut(s![t, .., ..]).assign(&cell);
+                self.cache.get_mut::<Array3<f64>>("gates").slice_mut(s![t, .., ..]).assign(&gates);
+                self.cache.get_mut::<Array3<f64>>("cells").slice_mut(s![t, .., ..]).assign(&cell);
             }
 
             cell = &cell * &forget_gate + (&input_gate * &cell_gate);
@@ -153,12 +126,18 @@ impl LSTM {
         let mut resid = Array2::zeros((batch_size, features));
         let mut cell_resid = Array2::zeros((batch_size, features));
 
+        let x = self.cache.get::<Array3<f64>>("x");
+        let states = self.cache.get::<Array3<f64>>("states");
+        let preactivations = self.cache.get::<Array3<f64>>("preactivations");
+        let gates = self.cache.get::<Array3<f64>>("gates");
+        let cells = self.cache.get::<Array3<f64>>("cells");
+
         for t in (0..seq_len).rev() {
             let d_loss_t = &d_loss.slice(s![.., t, ..]) + &resid;
 
-            let x = self.x.slice(s![t, .., ..]);
-            let state = self.states.slice(s![t, .., ..]);
-            let preactivations = self.preactivations.slice(s![t, .., ..]);
+            let x = x.slice(s![t, .., ..]);
+            let state = states.slice(s![t, .., ..]);
+            let preactivations = preactivations.slice(s![t, .., ..]);
             let preactivations_forget = preactivations.slice(s![.., 0..self.d_model]);
             let preactivations_input =
                 preactivations.slice(s![.., self.d_model..(2 * self.d_model)]);
@@ -166,13 +145,13 @@ impl LSTM {
                 preactivations.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
             let preactivations_output = preactivations.slice(s![.., (3 * self.d_model)..]);
 
-            let gates = self.gates.slice(s![t, .., ..]);
+            let gates = gates.slice(s![t, .., ..]);
             let forget_gate = gates.slice(s![.., 0..self.d_model]);
             let input_gate = gates.slice(s![.., self.d_model..(2 * self.d_model)]);
             let cell_gate = gates.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
             let output_gate = gates.slice(s![.., (3 * self.d_model)..]);
 
-            let cell = self.cells.slice(s![t, .., ..]);
+            let cell = cells.slice(s![t, .., ..]);
 
             // recompute cell next, used in creating output state
             let cell_next = &cell * &forget_gate + (&input_gate * &cell_gate);
@@ -310,35 +289,20 @@ impl LSTM {
             cell.dim()
         );
 
-        if self.x.dim() == (0, 0, 0) {
-            self.x = Array3::zeros((0, batch_size, features))
-        }
+        self.cache.init("x", Array3::<f64>::zeros((0, batch_size, features)))
+            .push(Axis(0), x.view()).unwrap();
 
-        if self.states.dim() == (0, 0, 0) {
-            self.states = Array3::zeros((0, batch_size, features))
-        }
+        self.cache.init("states", Array3::<f64>::zeros((0, batch_size, features)))
+            .push(Axis(0), h.view()).unwrap();
 
-        if self.preactivations.dim() == (0, 0, 0) {
-            self.preactivations = Array3::zeros((0, batch_size, 4 * features))
-        }
-
-        if self.gates.dim() == (0, 0, 0) {
-            self.gates = Array3::zeros((0, batch_size, 4 * features))
-        }
-
-        if self.cells.dim() == (0, 0, 0) {
-            self.cells = Array3::zeros((0, batch_size, features))
-        }
-
-        self.x.push(Axis(0), x.view()).unwrap();
-        self.states.push(Axis(0), h.view()).unwrap();
-        self.cells.push(Axis(0), cell.view()).unwrap();
+        self.cache.init("cells", Array3::<f64>::zeros((0, batch_size, features)))
+            .push(Axis(0), cell.view()).unwrap();
 
         let x_i = x.dot(&self.w_i);
         let r = h.dot(&self.w_r);
         let preactivatons = &x_i + &r + &self.b;
 
-        self.preactivations
+        self.cache.init("preactivations", Array3::<f64>::zeros((0, batch_size, 4 * features)))
             .push(Axis(0), preactivatons.view())
             .unwrap();
 
@@ -362,7 +326,9 @@ impl LSTM {
             cell_gate.view(),
             output_gate.view()
         ];
-        self.gates.push(Axis(0), gates.view()).unwrap();
+
+        self.cache.init("gates", Array3::<f64>::zeros((0, batch_size, 4 * features)))
+            .push(Axis(0), gates.view()).unwrap();
 
         *cell = &(*cell) * &forget_gate + (&input_gate * &cell_gate);
         *h = &output_gate * f::tanh(&cell);

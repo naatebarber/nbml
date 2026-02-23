@@ -5,24 +5,19 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f::{self, d_softmax},
-    optim::param::{Param, ToParams},
+    optim::{cache::Cache, param::{Param, ToParams}},
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Attention {
-    q: Array3<f64>,
-    k: Array3<f64>,
-    v: Array3<f64>,
-    weights: Array3<f64>,
+    #[serde(skip)]
+    pub cache: Cache
 }
 
 impl Attention {
     pub fn new() -> Self {
         Self {
-            q: Array3::zeros((0, 0, 0)),
-            k: Array3::zeros((0, 0, 0)),
-            v: Array3::zeros((0, 0, 0)),
-            weights: Array3::zeros((0, 0, 0)),
+            cache: Cache::new()
         }
     }
 
@@ -50,30 +45,13 @@ impl Attention {
             mask.dim(),
             (batch_size, seq_len_q, seq_len_k)
         );
-
-        self.q = if grad {
-            q.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.k = if grad {
-            k.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.v = if grad {
-            v.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.weights = if grad {
-            Array3::zeros((batch_size, seq_len_q, seq_len_k))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
+        
+        if grad {
+            self.cache.set("q", q.clone());
+            self.cache.set("k", k.clone());
+            self.cache.set("v", v.clone());
+            self.cache.set("weights", Array3::<f64>::zeros((batch_size, seq_len_q, seq_len_k)));
+        }
 
         let mut output = Array3::zeros((batch_size, seq_len_q, features_v));
 
@@ -92,7 +70,9 @@ impl Attention {
             output.slice_mut(s![i, .., ..]).assign(&out);
 
             if grad {
-                self.weights.slice_mut(s![i, .., ..]).assign(&weights);
+                self.cache
+                    .get_mut::<Array3<f64>>("weights")
+                    .slice_mut(s![i, .., ..]).assign(&weights);
             }
         }
 
@@ -100,19 +80,24 @@ impl Attention {
     }
 
     pub fn backward(&mut self, d_loss: Array3<f64>) -> (Array3<f64>, Array3<f64>, Array3<f64>) {
-        let (batch_size, _, _) = self.q.dim();
-        let (_, _, features_k) = self.k.dim();
+        let q = self.cache.get::<Array3<f64>>("q");
+        let k = self.cache.get::<Array3<f64>>("k");
+        let v = self.cache.get::<Array3<f64>>("v");
+        let weights = self.cache.get::<Array3<f64>>("weights");
 
-        let mut d_q = Array3::zeros(self.q.dim());
-        let mut d_k = Array3::zeros(self.k.dim());
-        let mut d_v = Array3::zeros(self.v.dim());
+        let (batch_size, _, _) = q.dim();
+        let (_, _, features_k) = k.dim();
+
+        let mut d_q = Array3::zeros(q.dim());
+        let mut d_k = Array3::zeros(k.dim());
+        let mut d_v = Array3::zeros(v.dim());
 
         for i in 0..batch_size {
             let d_loss_i = d_loss.slice(s![i, .., ..]);
-            let weights_i = self.weights.slice(s![i, .., ..]);
-            let q_i = self.q.slice(s![i, .., ..]);
-            let k_i = self.k.slice(s![i, .., ..]);
-            let v_i = self.v.slice(s![i, .., ..]);
+            let weights_i = weights.slice(s![i, .., ..]);
+            let q_i = q.slice(s![i, .., ..]);
+            let k_i = k.slice(s![i, .., ..]);
+            let v_i = v.slice(s![i, .., ..]);
 
             let d_v_i = weights_i.t().dot(&d_loss_i);
             d_v.slice_mut(s![i, .., ..]).assign(&d_v_i);
@@ -133,7 +118,7 @@ impl Attention {
     }
 
     pub fn weights(&self) -> &Array3<f64> {
-        &self.weights
+        &self.cache.get("weights")
     }
 }
 
@@ -150,8 +135,8 @@ pub struct SelfAttention {
 
     pub attention: Attention,
 
-    x_2d: Array2<f64>,
-    attn_2d: Array2<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     d_w_qkv: Array2<f64>,
     d_b_qkv: Array1<f64>,
@@ -173,8 +158,7 @@ impl SelfAttention {
 
             attention: Attention::new(),
 
-            x_2d: Array2::zeros((0, 0)),
-            attn_2d: Array2::zeros((0, 0)),
+            cache: Cache::new(),
 
             d_w_qkv: Array2::zeros((0, 0)),
             d_b_qkv: Array1::zeros(0),
@@ -192,11 +176,9 @@ impl SelfAttention {
             .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
 
-        self.x_2d = if grad {
-            x_2d.clone()
-        } else {
-            Array2::zeros((0, 0))
-        };
+        if grad {
+            self.cache.set("x_2d", x_2d.clone());
+        }
 
         // qkv = (B * S, 3 * nH * dH)
         let qkv = x_2d.dot(&self.w_qkv) + &self.b_qkv;
@@ -244,11 +226,9 @@ impl SelfAttention {
             .into_shape_clone((batch_size * seq_len, self.n_head * self.d_head))
             .unwrap();
 
-        self.attn_2d = if grad {
-            attn_2d.clone()
-        } else {
-            Array2::zeros((0, 0))
-        };
+        if grad {
+            self.cache.set("attn_2d", attn_2d.clone());
+        }
 
         // o = (B * S, F)
         let o_2d = attn_2d.dot(&self.w_o) + &self.b_o;
@@ -281,7 +261,7 @@ impl SelfAttention {
             .unwrap();
 
         self.d_b_o += &d_loss_2d.sum_axis(Axis(0));
-        self.d_w_o += &(self.attn_2d.t().dot(&d_loss_2d));
+        self.d_w_o += &(self.cache.get::<Array2<f64>>("attn_2d").t().dot(&d_loss_2d));
 
         // (B * S, nH * dH)
         let d_o_2d = d_loss_2d.dot(&self.w_o.t());
@@ -320,7 +300,7 @@ impl SelfAttention {
             .unwrap();
 
         self.d_b_qkv += &d_qkv.sum_axis(Axis(0));
-        self.d_w_qkv += &(self.x_2d.t().dot(&d_qkv));
+        self.d_w_qkv += &(self.cache.get::<Array2<f64>>("x_2d").t().dot(&d_qkv));
 
         let d_proj_2d = d_qkv.dot(&self.w_qkv.t());
 
@@ -356,10 +336,9 @@ pub struct CrossAttention {
 
     pub attention: Attention,
 
-    x_q_2d: Array2<f64>,
-    x_kv_2d: Array2<f64>,
-    attn_2d: Array2<f64>,
-
+    #[serde(skip)]
+    pub cache: Cache,
+    
     d_w_q: Array2<f64>,
     d_b_q: Array1<f64>,
     d_w_kv: Array2<f64>,
@@ -384,9 +363,7 @@ impl CrossAttention {
 
             attention: Attention::new(),
 
-            x_q_2d: Array2::zeros((0, 0)),
-            x_kv_2d: Array2::zeros((0, 0)),
-            attn_2d: Array2::zeros((0, 0)),
+            cache: Cache::new(),
 
             d_w_q: Array2::zeros((0, 0)),
             d_b_q: Array1::zeros(0),
@@ -418,8 +395,8 @@ impl CrossAttention {
             .unwrap();
 
         if grad {
-            self.x_q_2d = x_q_2d.clone();
-            self.x_kv_2d = x_kv_2d.clone();
+            self.cache.set("x_q_2d", x_q_2d.clone());
+            self.cache.set("x_kv_2d", x_kv_2d.clone());
         }
 
         let q = x_q_2d.dot(&self.w_q) + &self.b_q;
@@ -466,7 +443,7 @@ impl CrossAttention {
             .unwrap();
 
         if grad {
-            self.attn_2d = attn_2d.clone();
+            self.cache.set("attn_2d", attn_2d.clone());
         }
 
         let output_2d = attn_2d.dot(&self.w_o) + &self.b_o;
@@ -508,7 +485,7 @@ impl CrossAttention {
             .unwrap();
 
         self.d_b_o += &d_loss_2d.sum_axis(Axis(0));
-        self.d_w_o += &(self.attn_2d.t().dot(&d_loss_2d));
+        self.d_w_o += &(self.cache.get::<Array2<f64>>("attn_2d").t().dot(&d_loss_2d));
 
         let d_o_2d = d_loss_2d.dot(&self.w_o.t());
 
@@ -553,9 +530,9 @@ impl CrossAttention {
             .unwrap();
 
         self.d_b_q += &d_q.sum_axis(Axis(0));
-        self.d_w_q += &(self.x_q_2d.t().dot(&d_q));
+        self.d_w_q += &(self.cache.get::<Array2<f64>>("x_q_2d").t().dot(&d_q));
         self.d_b_kv += &d_kv.sum_axis(Axis(0));
-        self.d_w_kv += &(self.x_kv_2d.t().dot(&d_kv));
+        self.d_w_kv += &(self.cache.get::<Array2<f64>>("x_kv_2d").t().dot(&d_kv));
 
         (
             d_q.dot(&self.w_q.t())

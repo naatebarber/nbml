@@ -1,10 +1,12 @@
 use ndarray::{Array2, Array3, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
-    optim::param::{Param, ToParams},
+    optim::{cache::Cache, param::{Param, ToParams}},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LinearSSM {
     pub d_model: usize,
     pub d_in: usize,
@@ -14,8 +16,8 @@ pub struct LinearSSM {
     pub b: Array2<f64>,
     pub c: Array2<f64>,
 
-    pub x: Array3<f64>,
-    pub states: Array3<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     pub d_a: Array2<f64>,
     pub d_b: Array2<f64>,
@@ -40,8 +42,7 @@ impl LinearSSM {
             b: init_b((d_in, d_model)),
             c: init_c((d_model, d_out)),
 
-            x: Array3::zeros((0, 0, 0)),
-            states: Array3::zeros((0, 0, 0)),
+            cache: Cache::new(),
 
             d_a: Array2::zeros((0, 0)),
             d_b: Array2::zeros((0, 0)),
@@ -56,17 +57,10 @@ impl LinearSSM {
 
         let mut state = Array2::zeros((batch_size, self.d_model));
 
-        self.x = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array3::zeros((seq_len + 1, batch_size, self.d_model))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
+        if grad {
+            self.cache.set("x", Array3::<f64>::zeros((seq_len, batch_size, features)));
+            self.cache.set("states", Array3::<f64>::zeros((seq_len + 1, batch_size, self.d_model)));
+        }
 
         let mut output = Array3::zeros((batch_size, seq_len, self.d_out));
 
@@ -76,8 +70,8 @@ impl LinearSSM {
             let r = state.dot(&self.a);
 
             if grad {
-                self.x.slice_mut(s![t, .., ..]).assign(&x_t);
-                self.states.slice_mut(s![t, .., ..]).assign(&state);
+                self.cache.get_mut::<Array3<f64>>("x").slice_mut(s![t, .., ..]).assign(&x_t);
+                self.cache.get_mut::<Array3<f64>>("states").slice_mut(s![t, .., ..]).assign(&state);
             }
 
             state = &r + &x_b;
@@ -86,7 +80,7 @@ impl LinearSSM {
         }
 
         if grad {
-            self.states.slice_mut(s![seq_len, .., ..]).assign(&state);
+            self.cache.get_mut::<Array3<f64>>("states").slice_mut(s![seq_len, .., ..]).assign(&state);
         }
 
         output
@@ -113,11 +107,14 @@ impl LinearSSM {
 
         let mut resid = Array2::zeros((batch_size, self.d_model));
 
+        let x = self.cache.get::<Array3<f64>>("x");
+        let states = self.cache.get::<Array3<f64>>("states");
+
         for t in (0..seq_len).rev() {
             let d_loss_t = d_loss.slice(s![.., t, ..]);
-            let state_t = self.states.slice(s![t, .., ..]);
-            let state_next = self.states.slice(s![t + 1, .., ..]);
-            let x_t = self.x.slice(s![t, .., ..]);
+            let state_t = states.slice(s![t, .., ..]);
+            let state_next = states.slice(s![t + 1, .., ..]);
+            let x_t = x.slice(s![t, .., ..]);
 
             self.d_c += &state_next.t().dot(&d_loss_t);
 

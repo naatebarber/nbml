@@ -137,7 +137,7 @@ fn lstm_sequence_pred_step_forward() {
         println!("{e} loss={loss}");
 
         model.backward(d_loss);
-        model.forward(Array3::zeros((0, 0, features)), false);
+        model.cache.clear();
         optim.step(&mut model);
 
         model.zero_grads();

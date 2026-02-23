@@ -2,8 +2,7 @@ use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f,
-    optim::param::{Param, ToParams},
+    f, optim::{cache::Cache, param::{Param, ToParams}}
 };
 
 // TODO
@@ -26,14 +25,8 @@ pub struct GatedLinearAttention {
     w_o: Array2<f64>,
     b_o: Array1<f64>,
 
-    x_2d: Array2<f64>,
-    q: Array3<f64>,
-    k: Array3<f64>,
-    v: Array3<f64>,
-    forget_2d: Array2<f64>,
-    forget_gates: Array3<f64>,
-    states: Array4<f64>,
-    attn_2d: Array2<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     d_w_qkv: Array2<f64>,
     d_b_qkv: Array1<f64>,
@@ -57,14 +50,7 @@ impl GatedLinearAttention {
             w_o: f::xavier_normal((n_head * d_head, d_in)),
             b_o: Array1::zeros(d_in),
 
-            x_2d: Array2::zeros((0, 0)),
-            q: Array3::zeros((0, 0, 0)),
-            k: Array3::zeros((0, 0, 0)),
-            v: Array3::zeros((0, 0, 0)),
-            forget_2d: Array2::zeros((0, 0)),
-            forget_gates: Array3::zeros((0, 0, 0)),
-            states: Array4::zeros((0, 0, 0, 0)),
-            attn_2d: Array2::zeros((0, 0)),
+            cache: Cache::new(),
 
             d_w_qkv: Array2::zeros((0, 0)),
             d_b_qkv: Array1::zeros(0),
@@ -105,48 +91,20 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size * self.n_head, seq_len, 2 * self.d_head))
             .unwrap();
 
-        self.x_2d = if grad { x_2d } else { Array2::zeros((0, 0)) };
-
-        self.q = if grad {
-            q.to_owned()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.k = if grad {
-            k.to_owned()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.v = if grad {
-            v.to_owned()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.forget_2d = if grad {
-            forget_2d
-        } else {
-            Array2::zeros((0, 0))
-        };
-
-        self.forget_gates = if grad {
-            forget_gates.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array4::zeros((
+        if grad {
+            self.cache.set("x_2d", x_2d);
+            self.cache.set("q", q.to_owned());
+            self.cache.set("k", k.to_owned());
+            self.cache.set("v", v.to_owned());
+            self.cache.set("forget_2d", forget_2d);
+            self.cache.set("forget_gates", forget_gates.clone());
+            self.cache.set("states", Array4::<f64>::zeros((
                 seq_len + 1,
                 batch_size * self.n_head,
                 self.d_head,
                 self.d_head,
-            ))
-        } else {
-            Array4::zeros((0, 0, 0, 0))
-        };
+            )))
+        }
 
         let mut state = Array3::zeros((batch_size * self.n_head, self.d_head, self.d_head));
         let mut attn = Array3::zeros((batch_size * self.n_head, seq_len, self.d_head));
@@ -176,7 +134,8 @@ impl GatedLinearAttention {
             attn.slice_mut(s![.., t, ..]).assign(&attn_t);
 
             if grad {
-                self.states.slice_mut(s![t + 1, .., .., ..]).assign(&state);
+                self.cache.get_mut::<Array4<f64>>("states")
+                    .slice_mut(s![t + 1, .., .., ..]).assign(&state);
             }
         }
 
@@ -192,14 +151,25 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size, seq_len, self.d_in))
             .unwrap();
 
-        self.attn_2d = if grad { attn_2d } else { Array2::zeros((0, 0)) };
+        if grad {
+            self.cache.set("attn_2d", attn_2d)
+        }
 
         output
     }
 
     pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
         let (batch_size, seq_len, features) = d_loss.dim();
-        let (_, _, d_k, d_v) = self.states.dim();
+    
+        let states = self.cache.get::<Array4<f64>>("states");
+        let q = self.cache.get::<Array3<f64>>("q");
+        let k = self.cache.get::<Array3<f64>>("k");
+        let v = self.cache.get::<Array3<f64>>("v");
+        let forget_gates = self.cache.get::<Array3<f64>>("forget_gates");
+        
+        let attn_2d = self.cache.get::<Array2<f64>>("attn_2d");
+
+        let (_, _, d_k, d_v) = states.dim();
 
         if self.d_w_o.dim() == (0, 0) {
             self.d_w_o = Array2::zeros(self.w_o.dim())
@@ -228,7 +198,7 @@ impl GatedLinearAttention {
         let d_loss_2d = d_loss
             .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
-        self.d_w_o += &(self.attn_2d.t().dot(&d_loss_2d));
+        self.d_w_o += &(attn_2d.t().dot(&d_loss_2d));
         self.d_b_o += &d_loss_2d.sum_axis(Axis(0));
 
         let d_attn = d_loss_2d
@@ -248,13 +218,13 @@ impl GatedLinearAttention {
 
         for t in (0..seq_len).rev() {
             let d_loss_t = d_attn.slice(s![.., t, ..]); // (B, d_v)
-            let state_prev = self.states.slice(s![t, .., .., ..]);
-            let state_next = self.states.slice(s![t + 1, .., .., ..]); // (B, d_k, d_v)
-            let q_t = self.q.slice(s![.., t, ..]); // (B, d_q)
-            let k_t = self.k.slice(s![.., t, ..]); // (B, d_k)
-            let v_t = self.v.slice(s![.., t, ..]); // (B, d_v)
+            let state_prev = states.slice(s![t, .., .., ..]);
+            let state_next = states.slice(s![t + 1, .., .., ..]); // (B, d_k, d_v)
+            let q_t = q.slice(s![.., t, ..]); // (B, d_q)
+            let k_t = k.slice(s![.., t, ..]); // (B, d_k)
+            let v_t = v.slice(s![.., t, ..]); // (B, d_v)
 
-            let forget_gate_t = self.forget_gates.slice(s![.., t, ..]); // (B, dv)
+            let forget_gate_t = forget_gates.slice(s![.., t, ..]); // (B, dv)
             let forget_alpha = forget_gate_t.slice(s![.., 0..self.d_head]);
             let forget_beta = forget_gate_t.slice(s![.., self.d_head..]);
             let forget_expanded_t =
@@ -300,7 +270,10 @@ impl GatedLinearAttention {
             d_loss_state = &d_loss_state * &forget_expanded_t;
         }
 
-        let d_z_forget = f::d_sigmoid(&self.forget_2d);
+        let forget_2d = self.cache.get::<Array2<f64>>("forget_2d");
+        let x_2d = self.cache.get::<Array2<f64>>("x_2d");
+
+        let d_z_forget = f::d_sigmoid(&forget_2d);
         let d_loss_forget_2d = d_loss_forget
             .into_shape_clone((batch_size, self.n_head, seq_len, 2 * self.d_head))
             .unwrap()
@@ -309,7 +282,7 @@ impl GatedLinearAttention {
             .unwrap()
             * &d_z_forget;
 
-        self.d_w_forget += &(self.x_2d.t().dot(&d_loss_forget_2d));
+        self.d_w_forget += &(x_2d.t().dot(&d_loss_forget_2d));
         self.d_b_forget += &d_loss_forget_2d.sum_axis(Axis(0));
         let d_x_forget_2d = d_loss_forget_2d.dot(&self.w_forget.t());
         let d_x_forget = d_x_forget_2d
@@ -324,7 +297,7 @@ impl GatedLinearAttention {
             .into_shape_clone((batch_size * seq_len, 3 * self.n_head * self.d_head))
             .unwrap();
 
-        self.d_w_qkv += &(self.x_2d.t().dot(&d_loss_qkv));
+        self.d_w_qkv += &(x_2d.t().dot(&d_loss_qkv));
         self.d_b_qkv += &d_loss_qkv.sum_axis(Axis(0));
 
         let d_x_qkv_2d = d_loss_qkv.dot(&self.w_qkv.t());

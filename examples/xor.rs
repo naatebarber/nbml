@@ -3,7 +3,7 @@ use ndarray::array;
 use nbml::{
     f,
     nn::ffn::FFN,
-    optim::{adam::AdamW, optimizer::Optimizer},
+    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 
 pub fn main() {
@@ -34,6 +34,7 @@ pub fn main() {
 
         // Update
         opt.step(&mut net);
+        net.zero_grads();
 
         if epoch % 1000 == 0 {
             println!("epoch {epoch}, loss {loss}");

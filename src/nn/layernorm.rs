@@ -1,15 +1,15 @@
 use ndarray::{Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 
-use crate::optim::param::{Param, ToParams};
+use crate::optim::{cache::Cache, param::{Param, ToParams}};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LayerNorm {
     pub gamma: Array1<f64>,
     pub beta: Array1<f64>,
 
-    pub o: Array2<f64>,
-    pub x_h: Array2<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     pub d_gamma: Array1<f64>,
     pub d_beta: Array1<f64>,
@@ -21,8 +21,7 @@ impl LayerNorm {
             gamma: Array1::ones(d_in),
             beta: Array1::zeros(d_in),
 
-            o: Array2::zeros((0, 0)),
-            x_h: Array2::zeros((0, 0)),
+            cache: Cache::new(),
 
             d_gamma: Array1::zeros(0),
             d_beta: Array1::zeros(0),
@@ -46,8 +45,8 @@ impl LayerNorm {
         let y_2 = (&x_h * &self.gamma) + &self.beta;
 
         if grad {
-            self.o = o;
-            self.x_h = x_h;
+            self.cache.set("o", o);
+            self.cache.set("x_h", x_h);
         }
 
         y_2.into_shape_clone((batch_size, seq_len, feature_size))
@@ -60,7 +59,10 @@ impl LayerNorm {
             .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
 
-        let d_gamma = (&d_loss * &self.x_h).sum_axis(Axis(0));
+        let x_h = self.cache.get::<Array2<f64>>("x_h");
+        let o = self.cache.get::<Array2<f64>>("o");
+
+        let d_gamma = (&d_loss * x_h).sum_axis(Axis(0));
         let d_beta = d_loss.sum_axis(Axis(0));
 
         self.d_gamma = if self.d_gamma.dim() == 0 {
@@ -76,10 +78,10 @@ impl LayerNorm {
         };
 
         let dx_hat = &d_loss * &self.gamma;
-        let dx = (1. / (features as f64 * &self.o))
+        let dx = (1. / (features as f64 * o))
             * (features as f64 * &dx_hat
                 - &dx_hat.sum_axis(Axis(1)).insert_axis(Axis(1))
-                - &self.x_h * (&dx_hat * &self.x_h).sum_axis(Axis(1)).insert_axis(Axis(1)));
+                - x_h * (&dx_hat * x_h).sum_axis(Axis(1)).insert_axis(Axis(1)));
 
         dx.into_shape_clone((batch_size, seq_len, features))
             .unwrap()

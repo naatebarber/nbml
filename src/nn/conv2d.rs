@@ -1,10 +1,12 @@
 use ndarray::{Array1, Array2, Array4, Axis, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
-    optim::param::{Param, ToParams},
+    optim::{cache::Cache, param::{Param, ToParams}},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Conv2D {
     pub channels_in: usize,
     pub channels_out: usize,
@@ -14,7 +16,8 @@ pub struct Conv2D {
     pub w: Array2<f64>, // (C_in * kH * kW, C_out)
     pub b: Array1<f64>, // (C_out)
 
-    pub stack: Array2<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     pub d_w: Array2<f64>,
     pub d_b: Array1<f64>,
@@ -37,7 +40,7 @@ impl Conv2D {
             w: init((channels_in * k_h * k_w, channels_out)),
             b: Array1::zeros(channels_out),
 
-            stack: Array2::zeros((0, 0)),
+            cache: Cache::new(),
 
             d_w: Array2::zeros((0, 0)),
             d_b: Array1::zeros(0),
@@ -84,7 +87,10 @@ impl Conv2D {
             .unwrap();
         let conv_out = conv_out.permuted_axes([2, 3, 0, 1]);
 
-        self.stack = if grad { stack } else { Array2::zeros((0, 0)) };
+
+        if grad {
+            self.cache.set("stack", stack)
+        }
 
         conv_out
     }
@@ -105,7 +111,7 @@ impl Conv2D {
             self.d_b = Array1::zeros(self.b.dim());
         }
 
-        self.d_w += &self.stack.t().dot(&d_z);
+        self.d_w += &self.cache.get::<Array2<f64>>("stack").t().dot(&d_z);
         self.d_b += &d_z.sum_axis(Axis(0));
 
         let d_stack = d_z.dot(&self.w.t()); // (batch_size * strides_h * strides_w, channels_in * k_h * k_w)
@@ -165,6 +171,7 @@ impl ToParams for Conv2D {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PatchwiseConv2D {
     pub channels_in: usize,
     pub channels_out: usize,
@@ -174,7 +181,8 @@ pub struct PatchwiseConv2D {
     pub w: Array2<f64>,
     pub b: Array1<f64>,
 
-    pub x: Array4<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     pub d_w: Array2<f64>,
     pub d_b: Array1<f64>,
@@ -197,7 +205,7 @@ impl PatchwiseConv2D {
             w: init((channels_in * k_h * k_w, channels_out)),
             b: Array1::zeros(channels_out),
 
-            x: Array4::zeros((0, 0, 0, 0)),
+            cache: Cache::new(),
 
             d_w: Array2::zeros((0, 0)),
             d_b: Array1::zeros(0),
@@ -233,7 +241,9 @@ impl PatchwiseConv2D {
             }
         }
 
-        self.x = if grad { x } else { Array4::zeros((0, 0, 0, 0)) };
+        if grad {
+            self.cache.set("x", x)
+        }
 
         output
     }
@@ -249,7 +259,9 @@ impl PatchwiseConv2D {
             self.d_b = Array1::zeros(self.b.dim());
         }
 
-        let mut d_x = Array4::zeros(self.x.dim());
+        let x = self.cache.get::<Array4<f64>>("x");
+
+        let mut d_x = Array4::zeros(x.dim());
 
         for i_h in 0..strides_h {
             for i_w in 0..strides_w {
@@ -259,8 +271,7 @@ impl PatchwiseConv2D {
                     .into_shape_clone((batch_size, channels_out))
                     .unwrap();
 
-                let patch = self
-                    .x
+                let patch = x
                     .slice(s![.., .., i_h..(i_h + self.k_h), i_w..(i_w + self.k_w)])
                     .to_owned()
                     .into_shape_clone((batch_size, self.channels_in * self.k_h * self.k_w))

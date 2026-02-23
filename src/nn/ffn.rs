@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::param::{Param, ToParams},
+    optim::{cache::Cache, param::{Param, ToParams}},
 };
 
 pub type LayerDef = (usize, usize, f::Activation);
@@ -15,8 +15,8 @@ pub struct Layer {
 
     pub activation: f::Activation,
 
-    pub x: Array2<f64>,
-    pub z: Array2<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
 
     pub d_w: Array2<f64>,
     pub d_b: Array1<f64>,
@@ -29,8 +29,7 @@ impl Layer {
             b: Array1::zeros(d_out),
             activation,
 
-            x: Array2::zeros((0, 0)),
-            z: Array2::zeros((0, 0)),
+            cache: Cache::new(),
 
             d_w: Array2::zeros((0, 0)),
             d_b: Array1::zeros(0),
@@ -41,16 +40,16 @@ impl Layer {
         let z = x.dot(&self.w) + &self.b;
 
         if grad {
-            self.x = x.clone();
-            self.z = z.clone();
+            self.cache.set("x", x);
+            self.cache.set("z", z.clone());
         }
 
         (self.activation.wake().0)(&z)
     }
 
     pub fn backward(&mut self, d_a: Array2<f64>) -> Array2<f64> {
-        let d_z = d_a * &(self.activation.wake().1)(&self.z);
-        let d_w = self.x.t().dot(&d_z);
+        let d_z = d_a * &(self.activation.wake().1)(&self.cache.get::<Array2<f64>>("z"));
+        let d_w = self.cache.get::<Array2<f64>>("x").t().dot(&d_z);
         let d_b = d_z.sum_axis(Axis(0));
 
         self.d_w = if self.d_w.dim() == (0, 0) {
