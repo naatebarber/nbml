@@ -1,10 +1,10 @@
-use core::f64;
 use crate::f::{self, Activation};
 use crate::ndarray::{Array1, Array2};
 use crate::ndarray_rand::{RandomExt, rand_distr::Uniform};
 use crate::nn::FFN;
 use crate::optim::param::ToParams;
-use ndarray::{Axis};
+use core::f64;
+use ndarray::Axis;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -20,10 +20,7 @@ pub struct SNN {
 }
 
 impl SNN {
-    pub fn new(
-        d_in: usize, 
-        d_hidden: usize, 
-    ) -> Self {
+    pub fn new(d_in: usize, d_hidden: usize) -> Self {
         Self {
             d_in,
             d_hidden,
@@ -55,11 +52,11 @@ impl SNN {
     }
 
     pub fn step(
-        &self, 
-        x: &Array2<f64>, 
-        state: &mut Array2<f64>, 
+        &self,
+        x: &Array2<f64>,
+        state: &mut Array2<f64>,
         since_spike: &mut Array2<f64>,
-        delta: f64
+        delta: f64,
     ) {
         let decay = self.taus.map(|t| (-delta / t).exp()).insert_axis(Axis(0));
         *state *= &decay;
@@ -89,7 +86,7 @@ impl LSM {
             reservoir: SNN::new(d_in, d_hidden),
             readout: FFN::new(vec![
                 (d_hidden, 2 * d_hidden, Activation::Relu),
-                (2 * d_hidden, d_out, Activation::Identity)
+                (2 * d_hidden, d_out, Activation::Identity),
             ]),
         }
     }
@@ -99,12 +96,12 @@ impl LSM {
     }
 
     pub fn step(
-        &mut self, 
-        x: &Array2<f64>, 
-        delta: f64, 
+        &mut self,
+        x: &Array2<f64>,
+        delta: f64,
         state: &mut Array2<f64>,
         since_spike: &mut Array2<f64>,
-        grad: bool
+        grad: bool,
     ) -> Array2<f64> {
         self.reservoir.step(&x, state, since_spike, delta);
         self.readout.forward(state.clone(), grad)

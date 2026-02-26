@@ -3,7 +3,6 @@ pub mod attention;
 pub mod attention_head;
 pub mod conv2d;
 pub mod esn;
-pub mod snn;
 pub mod experimental;
 pub mod ffn;
 pub mod gated_linear_attention;
@@ -12,6 +11,7 @@ pub mod linear_ssm;
 pub mod lstm;
 pub mod pooling;
 pub mod rnn;
+pub mod snn;
 pub mod transformer;
 #[deprecated(note = "use nbml::Transformer instead")]
 pub mod transformer_decoder;
