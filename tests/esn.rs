@@ -1,5 +1,6 @@
 use nbml::{
-    nn::ESN,
+    f::Activation,
+    nn::{ESN, FFN},
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 use ndarray::{Array2, Array3, Axis, concatenate, s};
@@ -8,6 +9,9 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn esn_forward_and_step_compute_same_value() {
     let mut esn = ESN::new(12, 24, 8);
+
+    esn.reservoir.set_spectral_radius(0.95, 1000);
+
     let x = Array3::random((1, 12, 12), Uniform::new(0., 1.));
 
     let pred_forward = esn.forward(x.clone(), false);
@@ -37,7 +41,12 @@ fn esn_sequence_pred() {
     let features = 10;
 
     let mut model = ESN::new(features, 2 * features, features);
-    model.set_spectral_radius(0.95, 2000);
+
+    model.set_readout(FFN::new(vec![
+        (2 * features, 2 * features, Activation::Relu),
+        (2 * features, features, Activation::Identity),
+    ]));
+    model.reservoir.set_spectral_radius(0.95, 1000);
 
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
@@ -90,6 +99,13 @@ fn esn_sequence_pred_step() {
     let hidden = 20;
 
     let mut model = ESN::new(features, hidden, features);
+
+    model.set_readout(FFN::new(vec![
+        (hidden, hidden, Activation::Relu),
+        (hidden, features, Activation::Identity),
+    ]));
+    model.reservoir.set_spectral_radius(0.95, 1000);
+
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 

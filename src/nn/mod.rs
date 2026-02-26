@@ -8,10 +8,10 @@ pub mod ffn;
 pub mod gated_linear_attention;
 pub mod layernorm;
 pub mod linear_ssm;
+pub mod lsm;
 pub mod lstm;
 pub mod pooling;
 pub mod rnn;
-pub mod snn;
 pub mod transformer;
 #[deprecated(note = "use nbml::Transformer instead")]
 pub mod transformer_decoder;
@@ -27,10 +27,10 @@ pub use ffn::*;
 pub use gated_linear_attention::*;
 pub use layernorm::*;
 pub use linear_ssm::*;
+pub use lsm::*;
 pub use lstm::*;
 pub use pooling::*;
 pub use rnn::*;
-pub use snn::*;
 pub use transformer::*;
 #[allow(deprecated)]
 pub use transformer_decoder::*;

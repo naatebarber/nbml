@@ -8,7 +8,7 @@ use ndarray::Axis;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-pub struct SNN {
+pub struct SNNReservoir {
     pub d_in: usize,
     pub d_hidden: usize,
 
@@ -18,7 +18,7 @@ pub struct SNN {
     pub w_r: Array2<f64>,
 }
 
-impl SNN {
+impl SNNReservoir {
     pub fn new(d_in: usize, d_hidden: usize) -> Self {
         Self {
             d_in,
@@ -60,20 +60,20 @@ impl SNN {
 }
 
 pub struct LSM {
-    pub reservoir: SNN,
+    pub reservoir: SNNReservoir,
     readout: FFN,
 }
 
 impl LSM {
     pub fn new(d_in: usize, d_hidden: usize, d_out: usize) -> Self {
         Self {
-            reservoir: SNN::new(d_in, d_hidden),
+            reservoir: SNNReservoir::new(d_in, d_hidden),
             readout: FFN::new(vec![(d_hidden, d_out, Activation::Identity)]),
         }
     }
 
-    pub fn set_output_activation(&mut self, activation: Activation) {
-        self.readout.layers[0].activation = activation;
+    pub fn set_readout(&mut self, readout: FFN) {
+        self.readout = readout;
     }
 
     pub fn step(

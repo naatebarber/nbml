@@ -6,31 +6,24 @@ use crate::{
     optim::param::ToParams,
 };
 
-pub struct ESN {
-    d_in: usize,
-    d_hidden: usize,
-    d_out: usize,
+pub struct RNNReservoir {
+    pub d_in: usize,
+    pub d_hidden: usize,
 
-    w_p: Array2<f64>,
-    w_r: Array2<f64>,
-    b: Array1<f64>,
-    readout: FFN,
+    pub w_p: Array2<f64>,
+    pub w_r: Array2<f64>,
+    pub b: Array1<f64>,
 }
 
-impl ESN {
-    pub fn new(d_in: usize, d_hidden: usize, d_out: usize) -> Self {
+impl RNNReservoir {
+    pub fn new(d_in: usize, d_hidden: usize) -> Self {
         Self {
             d_in,
             d_hidden,
-            d_out,
 
             w_p: f::xavier((d_in, d_hidden)),
             w_r: f::xavier((d_hidden, d_hidden)),
             b: Array1::zeros(d_hidden),
-            readout: FFN::new(vec![
-                (d_hidden, 2 * d_hidden, Activation::Relu),
-                (2 * d_hidden, d_out, Activation::Identity),
-            ]),
         }
     }
 
@@ -40,11 +33,7 @@ impl ESN {
         f::calculate_spectral_radius(&self.w_r, n)
     }
 
-    pub fn set_output_activation(&mut self, activation: Activation) {
-        self.readout.layers[1].activation = activation;
-    }
-
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&self, x: Array3<f64>) -> Array3<f64> {
         let (batch_size, seq_len, features) = x.dim();
 
         assert!(features == self.d_in, "feature dimension != d_in");
@@ -71,6 +60,49 @@ impl ESN {
             encoded.slice_mut(s![.., t, ..]).assign(&state);
         }
 
+        encoded
+    }
+
+    pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>) {
+        let x_p = x.dot(&self.w_p);
+        let r = h.dot(&self.w_r);
+
+        let preactivations = &x_p + &r + &self.b;
+        let activations = f::tanh(&preactivations);
+        *h = activations;
+    }
+}
+
+pub struct ESN {
+    pub d_in: usize,
+    pub d_hidden: usize,
+    pub d_out: usize,
+
+    pub reservoir: RNNReservoir,
+    pub readout: FFN,
+}
+
+impl ESN {
+    pub fn new(d_in: usize, d_hidden: usize, d_out: usize) -> Self {
+        Self {
+            d_in,
+            d_hidden,
+            d_out,
+
+            reservoir: RNNReservoir::new(d_in, d_hidden),
+            readout: FFN::new(vec![(d_hidden, d_out, Activation::Identity)]),
+        }
+    }
+
+    pub fn set_readout(&mut self, readout: FFN) {
+        self.d_out = readout.layers.last().unwrap().b.dim();
+        self.readout = readout;
+    }
+
+    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        let (batch_size, seq_len, _) = x.dim();
+        let encoded = self.reservoir.forward(x);
+
         let encoded_2d = encoded
             .into_shape_clone((batch_size * seq_len, self.d_hidden))
             .unwrap();
@@ -83,13 +115,7 @@ impl ESN {
     }
 
     pub fn step(&mut self, x: &Array2<f64>, h: &mut Array2<f64>, grad: bool) -> Array2<f64> {
-        let x_p = x.dot(&self.w_p);
-        let r = h.dot(&self.w_r);
-
-        let preactivations = &x_p + &r + &self.b;
-        let activations = f::tanh(&preactivations);
-        *h = activations;
-
+        self.reservoir.step(x, h);
         self.readout.forward(h.clone(), grad)
     }
 

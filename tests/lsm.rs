@@ -1,6 +1,6 @@
 use nbml::{
     f::Activation,
-    nn::LSM,
+    nn::{FFN, LSM},
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
 use ndarray::{Array1, Array2, Array3, s};
@@ -22,7 +22,8 @@ fn lsm_temporal_classification() {
     let delta = 0.1;
 
     let mut model = LSM::new(features, hidden, 1);
-    model.set_output_activation(Activation::Sigmoid);
+
+    model.set_readout(FFN::new(vec![(hidden, 1, Activation::Sigmoid)]));
     model.reservoir.set_spectral_radius(0.9, 2000);
     model.reservoir.set_tau_range(0.05, 0.5);
     model.reservoir.set_threshold_range(0.3, 0.8);
@@ -122,7 +123,8 @@ fn lsm_heterogeneous_delta() {
     let hidden = 40;
 
     let mut model = LSM::new(features, hidden, 1);
-    model.set_output_activation(Activation::Sigmoid);
+
+    model.set_readout(FFN::new(vec![(hidden, 1, Activation::Sigmoid)]));
     model.reservoir.set_spectral_radius(0.9, 2000);
     model.reservoir.set_tau_range(0.05, 0.5);
     model.reservoir.set_threshold_range(0.3, 0.8);
