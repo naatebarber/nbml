@@ -3,6 +3,7 @@ pub mod attention;
 pub mod attention_head;
 pub mod conv2d;
 pub mod esn;
+pub mod snn;
 pub mod experimental;
 pub mod ffn;
 pub mod gated_linear_attention;
@@ -29,6 +30,7 @@ pub use linear_ssm::*;
 pub use lstm::*;
 pub use pooling::*;
 pub use rnn::*;
+pub use snn::*;
 pub use transformer::*;
 #[allow(deprecated)]
 pub use transformer_decoder::*;

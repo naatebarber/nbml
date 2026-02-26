@@ -47,6 +47,8 @@ for batch in training_data {
 - **`LSTM`**: Long Short-Term Memory Network
 - **`RNN`**: Vanilla recurrent neural network
 - **`ESN`**: Echo-state network, fixed recurrence + readout
+- **`SNN`**: Spiking neural network
+- **`LSM`**: Liquid state machine
 - **`LayerNorm`**: Layer normalization
 - **`Pooling`**: Sequence mean-pooling
 - **`Conv2D`**: Explicit Im2Col Conv2D layer (CPU efficient, memory hungry)
