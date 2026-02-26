@@ -2,6 +2,7 @@ pub mod attention;
 #[deprecated(note = "use nbml::Attention instead")]
 pub mod attention_head;
 pub mod conv2d;
+pub mod esn;
 pub mod experimental;
 pub mod ffn;
 pub mod gated_linear_attention;
@@ -20,6 +21,7 @@ pub use attention::*;
 #[allow(deprecated)]
 pub use attention_head::*;
 pub use conv2d::*;
+pub use esn::*;
 pub use ffn::*;
 pub use gated_linear_attention::*;
 pub use layernorm::*;

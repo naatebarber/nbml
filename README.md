@@ -46,6 +46,7 @@ for batch in training_data {
 - **`FFN`**: Feedforward network with configurable layers
 - **`LSTM`**: Long Short-Term Memory Network
 - **`RNN`**: Vanilla recurrent neural network
+- **`ESN`**: Echo-state network, fixed recurrence + readout
 - **`LayerNorm`**: Layer normalization
 - **`Pooling`**: Sequence mean-pooling
 - **`Conv2D`**: Explicit Im2Col Conv2D layer (CPU efficient, memory hungry)
