@@ -1,10 +1,12 @@
 use ndarray::{Array1, Array2, Array4, Axis, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
     optim::param::{Param, ToParams},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Conv2D {
     pub channels_in: usize,
     pub channels_out: usize,
@@ -165,6 +167,7 @@ impl ToParams for Conv2D {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PatchwiseConv2D {
     pub channels_in: usize,
     pub channels_out: usize,

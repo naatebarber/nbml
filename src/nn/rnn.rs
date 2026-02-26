@@ -1,10 +1,12 @@
 use ndarray::{Array1, Array2, Array3, Axis, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
     optim::param::{Param, ToParams},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RNN {
     d_model: usize,
 
