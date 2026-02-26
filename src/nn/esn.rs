@@ -1,4 +1,5 @@
 use ndarray::{Array1, Array2, Array3, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f::{self, Activation},
@@ -6,6 +7,7 @@ use crate::{
     optim::param::ToParams,
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RNNReservoir {
     pub d_in: usize,
     pub d_hidden: usize,
@@ -73,6 +75,7 @@ impl RNNReservoir {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ESN {
     pub d_in: usize,
     pub d_hidden: usize,

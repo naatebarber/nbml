@@ -59,6 +59,7 @@ impl SNNReservoir {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LSM {
     pub reservoir: SNNReservoir,
     readout: FFN,
