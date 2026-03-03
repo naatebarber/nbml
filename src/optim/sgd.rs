@@ -1,9 +1,11 @@
+use serde::{Deserialize, Serialize};
+
 use super::{
     optimizer::Optimizer,
     param::{ParamValue, ToParams},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SGD {
     pub learning_rate: f64,
 }

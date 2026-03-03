@@ -1,4 +1,5 @@
 use ndarray::{Array1, Array2, Axis};
+use serde::{Deserialize, Serialize};
 
 use crate::f;
 
@@ -7,7 +8,7 @@ use super::{
     param::{ParamValue, ToParams},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum AdamParam {
     None,
     Scalar { m: f64, v: f64 },
@@ -15,7 +16,7 @@ pub enum AdamParam {
     Matrix { m: Array2<f64>, v: Array2<f64> },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AdamW {
     pub learning_rate: f64,
     pub clip_grad: f64,
