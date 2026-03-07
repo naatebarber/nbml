@@ -1,10 +1,12 @@
 use ndarray::{Array2, Array3, s};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
     optim::param::{Param, ToParams},
 };
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LinearSSM {
     pub d_model: usize,
     pub d_in: usize,

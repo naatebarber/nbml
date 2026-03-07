@@ -268,6 +268,18 @@ pub fn tanh_gaussian_correction_eps(a_raw: &Array2<f64>) -> Array1<f64> {
     deriv.mapv(|v| (v + 1e-8).ln()).sum_axis(Axis(1))
 }
 
+pub fn calculate_spectral_radius(w_r: &Array2<f64>, n: usize) -> f64 {
+    let mut h = Array2::ones((1, w_r.dim().0));
+    let mut radius = 0.;
+    for _ in 0..n {
+        h = h.dot(w_r);
+        radius = l2(&h.row(0).to_owned());
+        h /= radius;
+    }
+
+    radius
+}
+
 // ENUMS
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
