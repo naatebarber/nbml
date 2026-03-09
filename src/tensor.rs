@@ -91,6 +91,10 @@ impl Tensor {
         Tensor::from(self.data.log(base))
     }
 
+    pub fn zeros_like(&self) -> Tensor {
+        Tensor::from(&self.data * 0.)
+    }
+
     // Global reductions
 
     pub fn sum(&self) -> Float {
@@ -160,6 +164,14 @@ impl Tensor {
         )
     }
 
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn to_vec(&self) -> Vec<Float> {
+        self.data.iter().cloned().collect()
+    }
+
     // Min max
 
     pub fn min(&self) -> Float {
@@ -168,6 +180,21 @@ impl Tensor {
 
     pub fn max(&self) -> Float {
         self.data.max().unwrap().to_owned()
+    }
+
+    pub fn max_axis(&self, axis: usize) -> Tensor {
+        assert!(
+            axis < self.rank(),
+            "attempted to max axis {} on rank {} tensor",
+            axis,
+            self.rank()
+        );
+        Tensor::from(self.data.map_axis(Axis(axis), |lane| {
+            *lane
+                .iter()
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap()
+        }))
     }
 
     pub fn argmin(&self) -> Vec<usize> {
@@ -421,6 +448,17 @@ impl Tensor {
     }
 }
 
+/// alias for Tensor
+pub type Tensor1 = Tensor;
+/// alias for Tensor
+pub type Tensor2 = Tensor;
+/// alias for Tensor
+pub type Tensor3 = Tensor;
+/// alias for Tensor
+pub type Tensor4 = Tensor;
+/// alias for Tensor
+pub type Tensor5 = Tensor;
+
 // Convenience trait for defining shapes
 
 pub trait IntoShape {
@@ -494,6 +532,18 @@ impl SliceAxis {
 impl From<isize> for SliceAxis {
     fn from(value: isize) -> Self {
         SliceAxis::Index(value)
+    }
+}
+
+impl From<i32> for SliceAxis {
+    fn from(value: i32) -> Self {
+        SliceAxis::Index(value as isize)
+    }
+}
+
+impl From<usize> for SliceAxis {
+    fn from(value: usize) -> Self {
+        SliceAxis::Index(value as isize)
     }
 }
 
@@ -655,6 +705,20 @@ macro_rules! impl_primitive_op {
             type Output = Tensor;
             fn $method(self, rhs: $primitive) -> Tensor {
                 Tensor::from(self.data.to_owned() $op rhs)
+            }
+        }
+
+        impl $trait<Tensor> for $primitive {
+            type Output = Tensor;
+            fn $method(self, rhs: Tensor) -> Tensor {
+                Tensor::from(rhs.data.to_owned() $op self)
+            }
+        }
+
+        impl $trait<&Tensor> for $primitive {
+            type Output = Tensor;
+            fn $method(self, rhs: &Tensor) -> Tensor {
+                Tensor::from(rhs.data.to_owned() $op self)
             }
         }
     }
