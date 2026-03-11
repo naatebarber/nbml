@@ -24,10 +24,12 @@ impl Cache {
     }
 
     pub fn accumulate(&mut self, key: &str, value: Tensor) {
-        if let Some(current) = self.map.get_mut(key) {
-            *current += &value;
-        } else {
+        let current = self.map.entry(key.into()).or_insert(Tensor::zeros(0));
+
+        if current.shape() == &[0] {
             self.set(key, value)
+        } else {
+            *current += &value;
         }
     }
 
@@ -45,7 +47,7 @@ impl Index<&'static str> for Cache {
 
 impl IndexMut<&'static str> for Cache {
     fn index_mut(&mut self, idx: &'static str) -> &mut Tensor {
-        self.map.get_mut(idx).unwrap()
+        self.map.entry(idx.into()).or_insert(Tensor::zeros(0))
     }
 }
 

@@ -64,11 +64,6 @@ impl ToParams for FeedForward {
 
         params
     }
-
-    fn zero_grads(&mut self) {
-        self.layer_1.zero_grads();
-        self.layer_2.zero_grads();
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

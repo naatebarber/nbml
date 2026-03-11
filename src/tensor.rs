@@ -164,6 +164,21 @@ impl Tensor {
         )
     }
 
+    pub fn dim5(&self) -> (usize, usize, usize, usize, usize) {
+        assert!(
+            self.rank() == 5,
+            "attempted to call dim5 on tensor of rank {}",
+            self.rank()
+        );
+        (
+            self.shape()[0],
+            self.shape()[1],
+            self.shape()[2],
+            self.shape()[3],
+            self.shape()[4],
+        )
+    }
+
     pub fn len(&self) -> usize {
         self.data.len()
     }
@@ -252,19 +267,19 @@ impl Tensor {
 
     // Shape manipulation
 
+    pub fn permute_inplace(mut self, axes: &[usize]) -> Self {
+        self.data = self.data.permuted_axes(axes);
+        self
+    }
+
     pub fn permute(&self, axes: &[usize]) -> Tensor {
         Tensor::from(self.data.view().permuted_axes(axes).to_owned())
     }
 
-    pub fn reshape(&self, shape: impl IntoShape) -> Tensor {
+    pub fn reshape(mut self, shape: impl IntoShape) -> Self {
         let shape = shape.into_shape();
-        Tensor::from(
-            self.data
-                .view()
-                .to_shape(shape.as_slice())
-                .unwrap()
-                .to_owned(),
-        )
+        self.data = self.data.into_shape_clone(shape.as_slice()).unwrap();
+        self
     }
 
     pub fn broadcast(&self, shape: impl IntoShape) -> Tensor {
@@ -284,6 +299,16 @@ impl Tensor {
             self.rank()
         );
         Tensor::from(self.data.view().insert_axis(Axis(axis)).to_owned())
+    }
+
+    pub fn remove_axis(&self, axis: usize) -> Tensor {
+        assert!(
+            axis < self.rank(),
+            "attempted to insert axis {} on rank {} tensor",
+            axis,
+            self.rank()
+        );
+        Tensor::from(self.data.view().remove_axis(Axis(axis)).to_owned())
     }
 
     pub fn sum_axis(&self, axis: usize) -> Tensor {
@@ -387,6 +412,22 @@ impl Tensor {
         self.data
             .slice_mut(ndarray_slice.as_slice())
             .assign(&assign.data);
+    }
+
+    pub fn slice_accumulate(&mut self, slice: &[SliceAxis], accumulate: &Tensor) {
+        let sliced_shape = self.sliced_shape(slice);
+
+        assert!(
+            sliced_shape == accumulate.shape(),
+            "cannot accumulate a tensor of shape {:?} into a slice of shape {:?}",
+            accumulate.shape(),
+            sliced_shape
+        );
+
+        let ndarray_slice = Tensor::slice_axis_to_ndarray(slice);
+        let mut buf = self.data.slice_mut(ndarray_slice.as_slice());
+
+        buf += &accumulate.data;
     }
 
     pub fn concatenate(axis: usize, tensors: &[&Tensor]) -> Tensor {
@@ -529,50 +570,49 @@ impl SliceAxis {
     }
 }
 
-impl From<isize> for SliceAxis {
-    fn from(value: isize) -> Self {
-        SliceAxis::Index(value)
-    }
-}
-
-impl From<i32> for SliceAxis {
-    fn from(value: i32) -> Self {
-        SliceAxis::Index(value as isize)
-    }
-}
-
-impl From<usize> for SliceAxis {
-    fn from(value: usize) -> Self {
-        SliceAxis::Index(value as isize)
-    }
-}
-
-impl From<std::ops::Range<isize>> for SliceAxis {
-    fn from(r: std::ops::Range<isize>) -> SliceAxis {
-        SliceAxis::Range {
-            start: Some(r.start),
-            end: Some(r.end),
+macro_rules! slice_axis_for_primitive {
+    ($prim:tt) => {
+        impl From<$prim> for SliceAxis {
+            fn from(value: $prim) -> Self {
+                SliceAxis::Index(value as isize)
+            }
         }
-    }
+
+        impl From<std::ops::Range<$prim>> for SliceAxis {
+            fn from(r: std::ops::Range<$prim>) -> SliceAxis {
+                SliceAxis::Range {
+                    start: Some(r.start as isize),
+                    end: Some(r.end as isize),
+                }
+            }
+        }
+
+        impl From<std::ops::RangeFrom<$prim>> for SliceAxis {
+            fn from(r: std::ops::RangeFrom<$prim>) -> SliceAxis {
+                SliceAxis::Range {
+                    start: Some(r.start as isize),
+                    end: None,
+                }
+            }
+        }
+
+        impl From<std::ops::RangeTo<$prim>> for SliceAxis {
+            fn from(r: std::ops::RangeTo<$prim>) -> SliceAxis {
+                SliceAxis::Range {
+                    start: None,
+                    end: Some(r.end as isize),
+                }
+            }
+        }
+    };
 }
 
-impl From<std::ops::RangeFrom<isize>> for SliceAxis {
-    fn from(r: std::ops::RangeFrom<isize>) -> SliceAxis {
-        SliceAxis::Range {
-            start: Some(r.start),
-            end: None,
-        }
-    }
-}
-
-impl From<std::ops::RangeTo<isize>> for SliceAxis {
-    fn from(r: std::ops::RangeTo<isize>) -> SliceAxis {
-        SliceAxis::Range {
-            start: None,
-            end: Some(r.end),
-        }
-    }
-}
+slice_axis_for_primitive!(isize);
+slice_axis_for_primitive!(usize);
+slice_axis_for_primitive!(i32);
+slice_axis_for_primitive!(u32);
+slice_axis_for_primitive!(i64);
+slice_axis_for_primitive!(u64);
 
 impl From<std::ops::RangeFull> for SliceAxis {
     fn from(_: std::ops::RangeFull) -> Self {
@@ -711,14 +751,14 @@ macro_rules! impl_primitive_op {
         impl $trait<Tensor> for $primitive {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(rhs.data.to_owned() $op self)
+                Tensor::from(self $op rhs.data.to_owned())
             }
         }
 
         impl $trait<&Tensor> for $primitive {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(rhs.data.to_owned() $op self)
+                Tensor::from(self $op rhs.data.to_owned())
             }
         }
     }

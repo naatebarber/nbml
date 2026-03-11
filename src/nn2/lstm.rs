@@ -1,28 +1,25 @@
-use ndarray::{Array1, Array2, Array3, Axis, concatenate, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f,
-    optim::param::{Param, ToParams},
+    Tensor, f2 as f,
+    optim2::{Param, ToParams},
+    s,
+    tensor::{Tensor1, Tensor2, Tensor3},
+    util::Cache,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LSTM {
     d_model: usize,
 
-    w_i: Array2<f64>,
-    w_r: Array2<f64>,
-    b: Array1<f64>,
+    w_i: Tensor2,
+    w_r: Tensor2,
+    b: Tensor1,
 
-    x: Array3<f64>,
-    states: Array3<f64>,
-    preactivations: Array3<f64>,
-    gates: Array3<f64>,
-    cells: Array3<f64>,
-
-    d_wi: Array2<f64>,
-    d_wr: Array2<f64>,
-    d_b: Array1<f64>,
+    #[serde(skip)]
+    cache: Cache,
+    #[serde(skip)]
+    grads: Cache,
 }
 
 impl LSTM {
@@ -32,135 +29,95 @@ impl LSTM {
 
             w_i: f::xavier((d_model, 4 * d_model)),
             w_r: f::xavier((d_model, 4 * d_model)),
-            b: concatenate![
-                Axis(0),
-                Array1::ones(d_model).view(),
-                Array1::zeros(d_model * 3).view()
-            ],
+            b: Tensor::concatenate(0, &[&Tensor1::ones(d_model), &Tensor::zeros(3 * d_model)]),
 
-            x: Array3::zeros((0, 0, 0)),
-            states: Array3::zeros((0, 0, 0)),
-            preactivations: Array3::zeros((0, 0, 0)),
-            gates: Array3::zeros((0, 0, 0)),
-            cells: Array3::zeros((0, 0, 0)),
-
-            d_wi: Array2::zeros((0, 0)),
-            d_wr: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: Cache::new(),
+            grads: Cache::new(),
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
-        let (batch_size, seq_len, features) = x.dim();
+    pub fn forward(&mut self, x: Tensor3, grad: bool) -> Tensor3 {
+        let (batch_size, seq_len, features) = x.dim3();
 
         assert!(features == self.d_model, "feature dimension != d_model");
 
-        let mut state = Array2::zeros((batch_size, features));
-        let mut cell = Array2::zeros((batch_size, features));
-        let mut output = Array3::zeros(x.dim());
+        let mut state = Tensor2::zeros((batch_size, features));
+        let mut cell = Tensor2::zeros((batch_size, features));
+        let mut output = Tensor3::zeros_like(&x);
 
-        self.x = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.preactivations = if grad {
-            Array3::zeros((seq_len, batch_size, 4 * features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.gates = if grad {
-            Array3::zeros((seq_len, batch_size, 4 * features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.cells = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
+        if grad {
+            self.cache
+                .set("x", Tensor3::zeros((seq_len, batch_size, features)));
+            self.cache
+                .set("states", Tensor3::zeros((seq_len, batch_size, features)));
+            self.cache.set(
+                "preactivations",
+                Tensor3::zeros((seq_len, batch_size, 4 * features)),
+            );
+            self.cache
+                .set("gates", Tensor3::zeros((seq_len, batch_size, 4 * features)));
+            self.cache
+                .set("cells", Tensor3::zeros((seq_len, batch_size, features)));
+        }
 
         for t in 0..seq_len {
             let x_t = x.slice(s![.., t, ..]);
             let x_i = x_t.dot(&self.w_i);
             let r = state.dot(&self.w_r);
 
-            let preactivatons = &x_i + &r + &self.b;
+            let preactivations = &x_i + &r + &self.b;
 
-            let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
+            let forget_gate = f::sigmoid(&preactivations.slice(s![.., 0..self.d_model]));
             let input_gate = f::sigmoid(
-                &preactivatons
+                &preactivations
                     .slice(s![.., self.d_model..(2 * self.d_model)])
                     .to_owned(),
             );
             let cell_gate = f::tanh(
-                &preactivatons
+                &preactivations
                     .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
                     .to_owned(),
             );
-            let output_gate =
-                f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
+            let output_gate = f::sigmoid(
+                &preactivations
+                    .slice(s![.., (3 * self.d_model)..])
+                    .to_owned(),
+            );
 
             if grad {
-                self.x.slice_mut(s![t, .., ..]).assign(&x_t);
-                self.states.slice_mut(s![t, .., ..]).assign(&state);
-                self.preactivations
-                    .slice_mut(s![t, .., ..])
-                    .assign(&preactivatons);
-                let gates = concatenate![
-                    Axis(1),
-                    forget_gate.view(),
-                    input_gate.view(),
-                    cell_gate.view(),
-                    output_gate.view()
-                ];
-                self.gates.slice_mut(s![t, .., ..]).assign(&gates);
-                self.cells.slice_mut(s![t, .., ..]).assign(&cell);
+                self.cache["x"].slice_assign(s![t, .., ..], &x_t);
+                self.cache["states"].slice_assign(s![t, .., ..], &state);
+                self.cache["preactivations"].slice_assign(s![t, .., ..], &preactivations);
+
+                let gates =
+                    Tensor::concatenate(1, &[&forget_gate, &input_gate, &cell_gate, &output_gate]);
+
+                self.cache["gates"].slice_assign(s![t, .., ..], &gates);
+                self.cache["cells"].slice_assign(s![t, .., ..], &cell);
             }
 
             cell = &cell * &forget_gate + (&input_gate * &cell_gate);
             state = &output_gate * f::tanh(&cell);
 
-            output.slice_mut(s![.., t, ..]).assign(&state);
+            output.slice_assign(s![.., t, ..], &state);
         }
 
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
-        let (batch_size, seq_len, features) = d_loss.dim();
+    pub fn backward(&mut self, d_loss: Tensor3) -> Tensor3 {
+        let (batch_size, seq_len, features) = d_loss.dim3();
 
-        if self.d_wi.dim() == (0, 0) {
-            self.d_wi = Array2::zeros(self.w_i.dim());
-        }
-
-        if self.d_wr.dim() == (0, 0) {
-            self.d_wr = Array2::zeros(self.w_r.dim());
-        }
-
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.b.dim());
-        }
-
-        let mut d_x = Array3::zeros(d_loss.dim());
-        let mut resid = Array2::zeros((batch_size, features));
-        let mut cell_resid = Array2::zeros((batch_size, features));
+        let mut d_x = Tensor3::zeros_like(&d_loss);
+        let mut resid = Tensor2::zeros((batch_size, features));
+        let mut cell_resid = Tensor2::zeros((batch_size, features));
 
         for t in (0..seq_len).rev() {
             let d_loss_t = &d_loss.slice(s![.., t, ..]) + &resid;
 
-            let x = self.x.slice(s![t, .., ..]);
-            let state = self.states.slice(s![t, .., ..]);
-            let preactivations = self.preactivations.slice(s![t, .., ..]);
+            let x = self.cache["x"].slice(s![t, .., ..]);
+            let state = self.cache["states"].slice(s![t, .., ..]);
+            let preactivations = self.cache["preactivations"].slice(s![t, .., ..]);
             let preactivations_forget = preactivations.slice(s![.., 0..self.d_model]);
             let preactivations_input =
                 preactivations.slice(s![.., self.d_model..(2 * self.d_model)]);
@@ -168,13 +125,13 @@ impl LSTM {
                 preactivations.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
             let preactivations_output = preactivations.slice(s![.., (3 * self.d_model)..]);
 
-            let gates = self.gates.slice(s![t, .., ..]);
+            let gates = self.cache["gates"].slice(s![t, .., ..]);
             let forget_gate = gates.slice(s![.., 0..self.d_model]);
             let input_gate = gates.slice(s![.., self.d_model..(2 * self.d_model)]);
             let cell_gate = gates.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
             let output_gate = gates.slice(s![.., (3 * self.d_model)..]);
 
-            let cell = self.cells.slice(s![t, .., ..]);
+            let cell = self.cache["cells"].slice(s![t, .., ..]);
 
             // recompute cell next, used in creating output state
             let cell_next = &cell * &forget_gate + (&input_gate * &cell_gate);
@@ -200,21 +157,18 @@ impl LSTM {
             let d_cell_dz = &d_cell_gate * &f::d_tanh(&preactivations_cell.to_owned());
 
             // stack all gate dz
-            let d_gates_dz = concatenate![
-                Axis(1),
-                d_forget_dz.view(),
-                d_input_dz.view(),
-                d_cell_dz.view(),
-                d_output_dz.view()
-            ];
+
+            let d_gates_dz =
+                Tensor::concatenate(1, &[&d_forget_dz, &d_input_dz, &d_cell_dz, &d_output_dz]);
 
             // calculate gradients for w_i, w_r, b
-            self.d_wi += &x.t().dot(&d_gates_dz);
-            self.d_wr += &state.t().dot(&d_gates_dz);
-            self.d_b += &d_gates_dz.sum_axis(Axis(0));
+
+            self.grads.accumulate("d_wi", x.t().dot(&d_gates_dz));
+            self.grads.accumulate("d_wr", state.t().dot(&d_gates_dz));
+            self.grads.accumulate("d_b", d_gates_dz.sum_axis(0));
 
             let d_x_t = &d_gates_dz.dot(&self.w_i.t());
-            d_x.slice_mut(s![.., t, ..]).assign(&d_x_t);
+            d_x.slice_assign(s![.., t, ..], &d_x_t);
 
             resid = d_gates_dz.dot(&self.w_r.t());
         }
@@ -222,60 +176,14 @@ impl LSTM {
         d_x
     }
 
-    pub fn scan(&self, x: &Array3<f64>) -> (Array3<f64>, Array3<f64>) {
-        let (batch_size, seq_len, features) = x.dim();
-
+    pub fn step(&self, x: &Tensor2, h: &mut Tensor2, cell: &mut Tensor2) {
         assert!(
-            features == self.d_model,
-            "dimension mismatch, d_model={} d_x={:?}",
-            self.d_model,
-            x.dim()
-        );
-
-        let mut state = Array2::zeros((batch_size, features));
-        let mut cell = Array2::zeros((batch_size, features));
-        let mut output = Array3::zeros(x.dim());
-        let mut cell_output = Array3::zeros(x.dim());
-
-        for t in 0..seq_len {
-            let x_t = x.slice(s![.., t, ..]);
-            let x_i = x_t.dot(&self.w_i);
-            let r = state.dot(&self.w_r);
-
-            let preactivatons = &x_i + &r + &self.b;
-
-            let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
-            let input_gate = f::sigmoid(
-                &preactivatons
-                    .slice(s![.., self.d_model..(2 * self.d_model)])
-                    .to_owned(),
-            );
-            let cell_gate = f::tanh(
-                &preactivatons
-                    .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
-                    .to_owned(),
-            );
-            let output_gate =
-                f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
-
-            cell = &cell * &forget_gate + (&input_gate * &cell_gate);
-            state = &output_gate * f::tanh(&cell);
-
-            output.slice_mut(s![.., t, ..]).assign(&state);
-            cell_output.slice_mut(s![.., t, ..]).assign(&cell);
-        }
-
-        (output, cell_output)
-    }
-
-    pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>, cell: &mut Array2<f64>) {
-        assert!(
-            self.d_model == x.dim().1 && x.dim() == h.dim() && h.dim() == cell.dim(),
+            self.d_model == x.dim2().1 && x.dim2() == h.dim2() && h.dim2() == cell.dim2(),
             "dimension mismatch, d_model={} d_x={:?} d_h={:?} d_cell={:?}",
             self.d_model,
-            x.dim(),
-            h.dim(),
-            cell.dim()
+            x.dim2(),
+            h.dim2(),
+            cell.dim2()
         );
 
         let x_i = x.dot(&self.w_i);
@@ -295,76 +203,6 @@ impl LSTM {
                 .to_owned(),
         );
         let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
-
-        *cell = &(*cell) * &forget_gate + (&input_gate * &cell_gate);
-        *h = &output_gate * f::tanh(&cell);
-    }
-
-    pub fn step_forward(&mut self, x: &Array2<f64>, h: &mut Array2<f64>, cell: &mut Array2<f64>) {
-        let (batch_size, features) = x.dim();
-
-        assert!(
-            self.d_model == x.dim().1 && x.dim() == h.dim() && h.dim() == cell.dim(),
-            "dimension mismatch, d_model={} d_x={:?} d_h={:?} d_cell={:?}",
-            self.d_model,
-            x.dim(),
-            h.dim(),
-            cell.dim()
-        );
-
-        if self.x.dim() == (0, 0, 0) {
-            self.x = Array3::zeros((0, batch_size, features))
-        }
-
-        if self.states.dim() == (0, 0, 0) {
-            self.states = Array3::zeros((0, batch_size, features))
-        }
-
-        if self.preactivations.dim() == (0, 0, 0) {
-            self.preactivations = Array3::zeros((0, batch_size, 4 * features))
-        }
-
-        if self.gates.dim() == (0, 0, 0) {
-            self.gates = Array3::zeros((0, batch_size, 4 * features))
-        }
-
-        if self.cells.dim() == (0, 0, 0) {
-            self.cells = Array3::zeros((0, batch_size, features))
-        }
-
-        self.x.push(Axis(0), x.view()).unwrap();
-        self.states.push(Axis(0), h.view()).unwrap();
-        self.cells.push(Axis(0), cell.view()).unwrap();
-
-        let x_i = x.dot(&self.w_i);
-        let r = h.dot(&self.w_r);
-        let preactivatons = &x_i + &r + &self.b;
-
-        self.preactivations
-            .push(Axis(0), preactivatons.view())
-            .unwrap();
-
-        let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
-        let input_gate = f::sigmoid(
-            &preactivatons
-                .slice(s![.., self.d_model..(2 * self.d_model)])
-                .to_owned(),
-        );
-        let cell_gate = f::tanh(
-            &preactivatons
-                .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
-                .to_owned(),
-        );
-        let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
-
-        let gates = concatenate![
-            Axis(1),
-            forget_gate.view(),
-            input_gate.view(),
-            cell_gate.view(),
-            output_gate.view()
-        ];
-        self.gates.push(Axis(0), gates.view()).unwrap();
 
         *cell = &(*cell) * &forget_gate + (&input_gate * &cell_gate);
         *h = &output_gate * f::tanh(&cell);
@@ -372,11 +210,11 @@ impl LSTM {
 }
 
 impl ToParams for LSTM {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.d_wi),
-            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.d_wr),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::new(&mut self.w_i).with_grad(&mut self.grads["d_wi"]),
+            Param::new(&mut self.w_r).with_grad(&mut self.grads["d_wr"]),
+            Param::new(&mut self.b).with_grad(&mut self.grads["d_b"]),
         ]
     }
 }

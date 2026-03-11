@@ -1,9 +1,11 @@
-use ndarray::{Array1, Array2, Array4, Axis, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f::InitializationFn,
-    optim::param::{Param, ToParams},
+    f2::InitializationFn,
+    optim2::{Param, ToParams},
+    s,
+    tensor::{Tensor1, Tensor2, Tensor4},
+    util::Cache,
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -13,13 +15,13 @@ pub struct Conv2D {
     pub k_h: usize,
     pub k_w: usize,
 
-    pub w: Array2<f64>, // (C_in * kH * kW, C_out)
-    pub b: Array1<f64>, // (C_out)
+    pub w: Tensor2, // (C_in * kH * kW, C_out)
+    pub b: Tensor1, // (C_out)
 
-    pub stack: Array2<f64>,
-
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
+    #[serde(skip)]
+    pub grads: Cache,
 }
 
 impl Conv2D {
@@ -37,17 +39,15 @@ impl Conv2D {
             k_w,
 
             w: init((channels_in * k_h * k_w, channels_out)),
-            b: Array1::zeros(channels_out),
+            b: Tensor1::zeros(channels_out),
 
-            stack: Array2::zeros((0, 0)),
-
-            d_w: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: Cache::new(),
+            grads: Cache::new(),
         }
     }
 
-    pub fn forward(&mut self, x: Array4<f64>, grad: bool) -> Array4<f64> {
-        let (batch_size, channels_in, h, w) = x.dim();
+    pub fn forward(&mut self, x: Tensor4, grad: bool) -> Tensor4 {
+        let (batch_size, channels_in, h, w) = x.dim4();
 
         assert!(
             channels_in == self.channels_in,
@@ -59,85 +59,68 @@ impl Conv2D {
         let strides_h = h - self.k_h + 1;
         let strides_w = w - self.k_w + 1;
 
-        let mut stack = Array2::zeros((
+        let mut stack = Tensor2::zeros((
             batch_size * strides_h * strides_w,
             channels_in * self.k_h * self.k_w,
         ));
 
         for i_h in 0..strides_h {
             for i_w in 0..strides_w {
-                let patch = x
-                    .slice(s![.., .., i_h..(i_h + self.k_h), i_w..(i_w + self.k_w)])
-                    .to_owned();
-                let patch_2d = patch
-                    .into_shape_clone((batch_size, channels_in * self.k_h * self.k_w))
-                    .unwrap();
+                let patch = x.slice(s![
+                    ..,
+                    ..,
+                    i_h as isize..(i_h + self.k_h) as isize,
+                    i_w as isize..(i_w + self.k_w) as isize
+                ]);
+                let patch_2d = patch.reshape((batch_size, channels_in * self.k_h * self.k_w));
 
                 let stride_abs = batch_size * ((strides_w * i_h) + i_w);
-                stack
-                    .slice_mut(s![stride_abs..(stride_abs + batch_size), ..])
-                    .assign(&patch_2d);
+                stack.slice_assign(
+                    s![stride_abs as isize..(stride_abs + batch_size) as isize, ..],
+                    &patch_2d,
+                );
             }
         }
 
         let conv_out_2d = stack.dot(&self.w) + &self.b;
         let conv_out = conv_out_2d
-            .into_shape_clone((strides_h, strides_w, batch_size, self.channels_out))
-            .unwrap();
-        let conv_out = conv_out.permuted_axes([2, 3, 0, 1]);
+            .reshape((strides_h, strides_w, batch_size, self.channels_out))
+            .permute(&[2, 3, 0, 1]);
 
-        self.stack = if grad { stack } else { Array2::zeros((0, 0)) };
+        if grad {
+            self.cache.set("stack", stack);
+        }
 
         conv_out
     }
 
-    pub fn backward(&mut self, d_loss: Array4<f64>) -> Array4<f64> {
-        let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim();
+    pub fn backward(&mut self, d_loss: Tensor4) -> Tensor4 {
+        let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim4();
 
         let d_z = d_loss
-            .permuted_axes([2, 3, 0, 1])
-            .into_shape_clone((strides_h * strides_w * batch_size, channels_out))
-            .unwrap();
+            .permute(&[2, 3, 0, 1])
+            .reshape((strides_h * strides_w * batch_size, channels_out));
 
-        if self.d_w.dim() == (0, 0) {
-            self.d_w = Array2::zeros(self.w.dim());
-        }
+        let stack = &self.cache["stack"];
 
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.b.dim());
-        }
+        self.grads.accumulate("d_w", stack.t().dot(&d_z));
+        self.grads.accumulate("d_b", d_z.sum_axis(0));
 
-        self.d_w += &self.stack.t().dot(&d_z);
-        self.d_b += &d_z.sum_axis(Axis(0));
-
-        let d_stack = d_z.dot(&self.w.t()); // (batch_size * strides_h * strides_w, channels_in * k_h * k_w)
+        let d_stack = d_z.dot(&self.w.t());
 
         let h = strides_h + self.k_h - 1;
         let w = strides_w + self.k_w - 1;
-        let mut d_x = Array4::zeros((batch_size, self.channels_in, h, w)); // (batch_size, channels_in, h, w)
+        let mut d_x = Tensor4::zeros((batch_size, self.channels_in, h, w));
 
-        // start with d_stack = (batch_size * strides_h * strides_w, channels * k_h * k_w)
-        // split channels out
-        // d_stack_1 = (batch_size * strides_h * strides_w, channels, k_h * k_w)
-        // turn kernel back into matrix
-        // d_stack_2 = (batch_size * strides_h * strides_w, channels, k_h, k_w)
-        // split batch out
-        // d_stack_3 = (batch_size, strides_h * strides_w, channels, k_h, k_w)
-        //
-        // now the stride index represents where the matrix needs to be added to d_x by
-        // stride_tot = i in 0..d_stack_3.len()
-        // offset_h = Floor(stride_tot / stride_w)
-        // offset_x = stride_w % stride_tot
-
-        let d_stack = d_stack
-            .into_shape_clone((
-                batch_size,
-                strides_h * strides_w,
-                self.channels_in,
-                self.k_h,
-                self.k_w,
-            ))
-            .unwrap();
+        // d_stack = (batch_size * strides_h * strides_w, channels_in * k_h * k_w)
+        // reshape to (batch_size, strides_h * strides_w, channels_in, k_h, k_w)
+        let d_stack = d_stack.reshape((
+            batch_size,
+            strides_h * strides_w,
+            self.channels_in,
+            self.k_h,
+            self.k_w,
+        ));
 
         let strides_tot = strides_h * strides_w;
 
@@ -145,13 +128,16 @@ impl Conv2D {
             let offset_h = i / strides_w;
             let offset_w = i % strides_w;
 
-            let mut recv = d_x.slice_mut(s![
-                ..,
-                ..,
-                offset_h..(offset_h + self.k_h),
-                offset_w..(offset_w + self.k_w)
-            ]);
-            recv += &d_stack.slice(s![.., i, .., .., ..]);
+            let patch = d_stack.slice(s![.., i as isize, .., .., ..]);
+            d_x.slice_accumulate(
+                s![
+                    ..,
+                    ..,
+                    offset_h as isize..(offset_h + self.k_h) as isize,
+                    offset_w as isize..(offset_w + self.k_w) as isize
+                ],
+                &patch,
+            );
         }
 
         d_x
@@ -159,10 +145,10 @@ impl Conv2D {
 }
 
 impl ToParams for Conv2D {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::new(&mut self.w).with_grad(&mut self.grads["d_w"]),
+            Param::new(&mut self.b).with_grad(&mut self.grads["d_b"]),
         ]
     }
 }
@@ -174,13 +160,13 @@ pub struct PatchwiseConv2D {
     pub k_h: usize,
     pub k_w: usize,
 
-    pub w: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w: Tensor2,
+    pub b: Tensor1,
 
-    pub x: Array4<f64>,
-
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    #[serde(skip)]
+    pub cache: Cache,
+    #[serde(skip)]
+    pub grads: Cache,
 }
 
 impl PatchwiseConv2D {
@@ -198,17 +184,15 @@ impl PatchwiseConv2D {
             k_w,
 
             w: init((channels_in * k_h * k_w, channels_out)),
-            b: Array1::zeros(channels_out),
+            b: Tensor1::zeros(channels_out),
 
-            x: Array4::zeros((0, 0, 0, 0)),
-
-            d_w: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: Cache::new(),
+            grads: Cache::new(),
         }
     }
 
-    pub fn forward(&mut self, x: Array4<f64>, grad: bool) -> Array4<f64> {
-        let (batch_size, channels, h, w) = x.dim();
+    pub fn forward(&mut self, x: Tensor4, grad: bool) -> Tensor4 {
+        let (batch_size, channels, h, w) = x.dim4();
         assert!(
             channels == self.channels_in,
             "dimension mismatch, model_channels_in={} x_channels_in={}",
@@ -219,66 +203,72 @@ impl PatchwiseConv2D {
         let strides_h = h - self.k_h + 1;
         let strides_w = w - self.k_w + 1;
 
-        let mut output = Array4::zeros((batch_size, self.channels_out, strides_h, strides_w));
+        let mut output = Tensor4::zeros((batch_size, self.channels_out, strides_h, strides_w));
 
         for i_h in 0..strides_h {
             for i_w in 0..strides_w {
-                let patch = x
-                    .slice(s![.., .., i_h..(i_h + self.k_h), i_w..(i_w + self.k_w)])
-                    .to_owned(); // (B, C, kH, kW)
-                let patch = patch
-                    .into_shape_clone((batch_size, channels * self.k_h * self.k_w))
-                    .unwrap();
+                let patch = x.slice(s![
+                    ..,
+                    ..,
+                    i_h as isize..(i_h + self.k_h) as isize,
+                    i_w as isize..(i_w + self.k_w) as isize
+                ]);
+                let patch = patch.reshape((batch_size, channels * self.k_h * self.k_w));
 
                 let k_out = patch.dot(&self.w) + &self.b;
 
-                output.slice_mut(s![.., .., i_h, i_w]).assign(&k_out);
+                output.slice_assign(s![.., .., i_h as isize, i_w as isize], &k_out);
             }
         }
 
-        self.x = if grad { x } else { Array4::zeros((0, 0, 0, 0)) };
+        if grad {
+            self.cache.set("x", x);
+        }
 
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array4<f64>) -> Array4<f64> {
-        let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim();
+    pub fn backward(&mut self, d_loss: Tensor4) -> Tensor4 {
+        let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim4();
 
-        if self.d_w.dim() == (0, 0) {
-            self.d_w = Array2::zeros(self.w.dim());
-        }
-
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.b.dim());
-        }
-
-        let mut d_x = Array4::zeros(self.x.dim());
+        let x = &self.cache["x"];
+        let x_shape = x.shape().to_vec();
+        let mut d_x = Tensor4::zeros(x_shape);
 
         for i_h in 0..strides_h {
             for i_w in 0..strides_w {
                 let d_patch = d_loss
-                    .slice(s![.., .., i_h, i_w])
-                    .to_owned()
-                    .into_shape_clone((batch_size, channels_out))
-                    .unwrap();
+                    .slice(s![.., .., i_h as isize, i_w as isize])
+                    .reshape((batch_size, channels_out));
 
-                let patch = self
-                    .x
-                    .slice(s![.., .., i_h..(i_h + self.k_h), i_w..(i_w + self.k_w)])
-                    .to_owned()
-                    .into_shape_clone((batch_size, self.channels_in * self.k_h * self.k_w))
-                    .unwrap();
+                let patch = x
+                    .slice(s![
+                        ..,
+                        ..,
+                        i_h as isize..(i_h + self.k_h) as isize,
+                        i_w as isize..(i_w + self.k_w) as isize
+                    ])
+                    .reshape((batch_size, self.channels_in * self.k_h * self.k_w));
 
-                self.d_w += &(patch.t().dot(&d_patch));
-                self.d_b += &d_patch.sum_axis(Axis(0));
+                self.grads.accumulate("d_w", patch.t().dot(&d_patch));
+                self.grads.accumulate("d_b", d_patch.sum_axis(0));
 
-                let dx_dpatch_2d = d_patch.dot(&self.w.t()); // (B, C * kh * kw)
-                let dx_dpatch = dx_dpatch_2d
-                    .into_shape_clone((batch_size, self.channels_in, self.k_h, self.k_w))
-                    .unwrap();
-                let mut dx_accum =
-                    d_x.slice_mut(s![.., .., i_h..(i_h + self.k_h), i_w..(i_w + self.k_w)]);
-                dx_accum += &dx_dpatch;
+                let dx_dpatch = d_patch.dot(&self.w.t()).reshape((
+                    batch_size,
+                    self.channels_in,
+                    self.k_h,
+                    self.k_w,
+                ));
+
+                d_x.slice_accumulate(
+                    s![
+                        ..,
+                        ..,
+                        i_h as isize..(i_h + self.k_h) as isize,
+                        i_w as isize..(i_w + self.k_w) as isize
+                    ],
+                    &dx_dpatch,
+                );
             }
         }
 
@@ -287,10 +277,10 @@ impl PatchwiseConv2D {
 }
 
 impl ToParams for PatchwiseConv2D {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::new(&mut self.w).with_grad(&mut self.grads["d_w"]),
+            Param::new(&mut self.b).with_grad(&mut self.grads["d_b"]),
         ]
     }
 }

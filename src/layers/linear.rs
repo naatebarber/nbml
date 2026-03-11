@@ -40,11 +40,11 @@ impl Linear {
     pub fn backward(&mut self, d_loss: &Tensor) -> Tensor {
         let d_w = self.cache["x"].t().dot(&d_loss);
         let d_b = d_loss.sum_axis(0);
-        let d_z = d_loss.dot(&self.w.t());
 
         self.grads.accumulate("d_w", d_w);
         self.grads.accumulate("d_b", d_b);
 
+        let d_z = d_loss.dot(&self.w.t());
         d_z
     }
 }

@@ -640,6 +640,30 @@ fn insert_axis_out_of_bounds() {
     Tensor::zeros((3, 4)).insert_axis(3);
 }
 
+#[test]
+fn remove_axis() {
+    let t = Tensor::zeros((1, 3, 4));
+
+    // front
+    assert_eq!(t.remove_axis(0).shape(), &[3, 4]);
+    // middle
+    assert_eq!(t.remove_axis(1).shape(), &[1, 4]);
+    // end
+    assert_eq!(t.remove_axis(2).shape(), &[1, 3]);
+
+    // data preserved
+    let mut t = Tensor::zeros((1, 2, 3));
+    t[[0, 1, 2]] = 42.0;
+    let r = t.remove_axis(0);
+    assert_eq!(r[[1, 2]], 42.0);
+}
+
+#[test]
+#[should_panic(expected = "attempted to insert axis")]
+fn remove_axis_out_of_bounds() {
+    Tensor::zeros((3, 4)).remove_axis(2);
+}
+
 // ── Slicing ─────────────────────────────────────────────────────────
 
 #[test]
@@ -712,6 +736,27 @@ fn slice_assign() {
 fn slice_assign_shape_mismatch() {
     let mut t = Tensor::zeros((3, 3));
     t.slice_assign(s![0..2, 0..2], &Tensor::ones((3, 2)));
+}
+
+#[test]
+fn slice_accumulate() {
+    let mut t = Tensor::ones((3, 3));
+    let patch = Tensor::from_elem((2, 2), 5.0);
+    t.slice_accumulate(s![0..2, 0..2], &patch);
+    assert_eq!(t[[0, 0]], 6.0);
+    assert_eq!(t[[1, 1]], 6.0);
+    assert_eq!(t[[2, 2]], 1.0);
+
+    // accumulate again to verify it adds, not replaces
+    t.slice_accumulate(s![0..2, 0..2], &patch);
+    assert_eq!(t[[0, 0]], 11.0);
+}
+
+#[test]
+#[should_panic(expected = "cannot accumulate a tensor of shape")]
+fn slice_accumulate_shape_mismatch() {
+    let mut t = Tensor::zeros((3, 3));
+    t.slice_accumulate(s![0..2, 0..2], &Tensor::ones((3, 2)));
 }
 
 // ── Concatenate ─────────────────────────────────────────────────────
