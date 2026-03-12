@@ -3,7 +3,7 @@ use std::{
     usize,
 };
 
-use ndarray::{ArcArrayD, Axis, Dimension, Ix1, Ix2, SliceInfoElem, concatenate, stack};
+use ndarray::{ArcArrayD, Axis, Dimension, Ix1, Ix2, Ix3, SliceInfoElem, concatenate, stack};
 use ndarray_rand::{
     RandomExt,
     rand_distr::{Normal, Uniform},
@@ -259,6 +259,56 @@ impl Tensor {
                 self.rank(),
                 rhs.rank()
             ),
+        }
+    }
+
+    pub fn outer(&self, rhs: &Self) -> Tensor {
+        assert!(self.rank() == rhs.rank(), "attempted to take outer product between two differently-ranked tensors");
+
+        match (self.rank(), rhs.rank()) {
+            (0, 0) => self * rhs,
+            (1, 1) => {
+                let left = self.data.view().into_dimensionality::<Ix1>().unwrap();
+                let right = rhs.data.view().into_dimensionality::<Ix1>().unwrap();
+                let outer = &left.insert_axis(Axis(1)) * &right.insert_axis(Axis(0));
+                Tensor::from(outer.into_dyn())
+            },
+            (2, 2) => {
+                let left = self.data.view().into_dimensionality::<Ix2>().unwrap();
+                let right = rhs.data.view().into_dimensionality::<Ix2>().unwrap();
+                let outer = &left.insert_axis(Axis(2)) * &right.insert_axis(Axis(1));
+                Tensor::from(outer.into_dyn())
+            },
+            _ => panic!(
+                "outer product only supports rank pairs (0, 0), (1, 1), (2, 2), attempted ({}, {})",
+                self.rank(),
+                rhs.rank()
+            )
+        }
+    }
+
+    pub fn broadcast_expand(&self, rhs: &Self, axis: usize) -> Tensor {
+        assert!(self.rank() == rhs.rank() + 1, "attempted to apply broadcast expand product where self.rank != rhs.rank + 1");
+        assert!(axis <= rhs.rank(), "cannot apply broadcast expand across new axis {} for tensor rank {}", axis, rhs.rank());
+
+        match (self.rank(), rhs.rank()) {
+            (2, 1) => {
+                let left = self.data.view().into_dimensionality::<Ix2>().unwrap(); 
+                let right = rhs.data.view().into_dimensionality::<Ix1>().unwrap(); 
+                let b = &left * &right.insert_axis(Axis(axis));
+                Tensor::from(b.into_dyn())
+            },
+            (3, 2) => {
+                let left = self.data.view().into_dimensionality::<Ix3>().unwrap();
+                let right = rhs.data.view().into_dimensionality::<Ix2>().unwrap();
+                let b = &left * &right.insert_axis(Axis(axis));
+                Tensor::from(b.into_dyn())
+            },
+            _ => panic!(
+                "broadcast expand only supports rank pairs (2, 1), (3, 2), attempted ({}, {})",
+                self.rank(),
+                rhs.rank(),
+            )
         }
     }
 
@@ -683,21 +733,21 @@ macro_rules! impl_op {
         impl $trait<&Tensor> for &Tensor {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(&self.data $op &rhs.data)
+                Tensor::from(&self.data.view() $op &rhs.data.view())
             }
         }
 
         impl $trait<&Tensor> for Tensor {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(self.data $op &rhs.data)
+                Tensor::from(self.data $op &rhs.data.view())
             }
         }
 
         impl $trait<Tensor> for &Tensor {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(&self.data $op rhs.data)
+                Tensor::from(&self.data.view() $op rhs.data)
             }
         }
     }

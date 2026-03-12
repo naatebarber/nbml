@@ -105,18 +105,14 @@ impl GatedLinearAttention {
             let forget_gate_t = forget_gates.slice(s![.., t, ..]);
             let forget_alpha = forget_gate_t.slice(s![.., 0..self.d_head as isize]);
             let forget_beta = forget_gate_t.slice(s![.., self.d_head as isize..]);
-            let forget_expanded = &forget_alpha.insert_axis(2) * &forget_beta.insert_axis(1);
+            let forget_expanded = forget_alpha.outer(&forget_beta);
 
             // (B, d_k, 1) * (B, 1, d_v) -> (B, d_k, d_v)
-            let k_t_inner = k_t.insert_axis(2);
-            let v_t_outer = v_t.insert_axis(1);
-            let kv = k_t_inner * v_t_outer;
-
+            let kv = k_t.outer(&v_t);
             state = &state * forget_expanded + kv;
 
             // (B, d_q) -> (B, d_q, 1)
-            let q_t_inner = q_t.insert_axis(2);
-            let attn_t = (q_t_inner * &state).sum_axis(1);
+            let attn_t = state.broadcast_expand(&q_t, 2).sum_axis(1);
 
             attn.slice_assign(s![.., t, ..], &attn_t);
 
@@ -175,38 +171,39 @@ impl GatedLinearAttention {
             let forget_gate_t = self.cache["forget_gates"].slice(s![.., t, ..]); // (B, 2*dH)
             let forget_alpha = forget_gate_t.slice(s![.., 0..self.d_head as isize]);
             let forget_beta = forget_gate_t.slice(s![.., self.d_head as isize..]);
-            let forget_expanded_t = forget_alpha.insert_axis(2) * forget_beta.insert_axis(1);
 
-            // (B, d_v) -> (B, 1, d_v)
-            let d_loss_t = d_loss_t.insert_axis(1);
+            let forget_expanded_t = forget_alpha.outer(&forget_beta);
 
             // state_t * d_loss_t
             // (B, d_k, d_v) * (B, 1, d_v) -> (B, d_k, d_v)
-            let d_loss_q_t = (state_next * &d_loss_t).sum_axis(2);
+            let d_loss_q_t = state_next.broadcast_expand(&d_loss_t, 1).sum_axis(2);
             d_loss_q.slice_assign(s![.., t, ..], &d_loss_q_t);
 
             // q_t * d_loss_t
             // (B, d_k, 1) * (B, 1, d_v) -> (B, d_k, d_v)
             // this is next state, as in:
             // S' = f * S + k.dot(v.T)
-            d_loss_state += q_t.insert_axis(2) * &d_loss_t;
+            d_loss_state += q_t.outer(&d_loss_t);
 
             // forget gate grads
             // (B, d_k, d_v)
             let d_forget_expanded = &d_loss_state * state_prev;
-            let d_forget_alpha = (&d_forget_expanded * forget_beta.insert_axis(1)).sum_axis(2);
-            let d_forget_beta = (d_forget_expanded * forget_alpha.insert_axis(2)).sum_axis(1);
+
+            let d_forget_alpha = d_forget_expanded.broadcast_expand(&forget_beta, 1).sum_axis(2);
+            let d_forget_beta = d_forget_expanded.broadcast_expand(&forget_alpha, 2).sum_axis(1);
+
             let d_forget_t = Tensor::concatenate(1, &[&d_forget_alpha, &d_forget_beta]);
             d_loss_forget.slice_assign(s![.., t, ..], &d_forget_t);
 
             // (B, d_v) -> (B, 1, d_v)
             // (B, 1, d_v) * (B, d_k, d_v) -> (B, d_k, sum(d_v)) -> (B, d_k)
-            let d_loss_k_t = (v_t.insert_axis(1) * &d_loss_state).sum_axis(2);
+
+            let d_loss_k_t = d_loss_state.broadcast_expand(&v_t, 1).sum_axis(2);
             d_loss_k.slice_assign(s![.., t, ..], &d_loss_k_t);
 
             // (B, d_k) -> (B, d_k, 1)
             // (B, d_k, 1) * (B, d_k, d_v) -> (B, sum(d_k), d_v) -> (B, d_v)
-            let d_loss_v_t = (k_t.insert_axis(2) * &d_loss_state).sum_axis(1);
+            let d_loss_v_t = d_loss_state.broadcast_expand(&k_t, 2).sum_axis(1);
             d_loss_v.slice_assign(s![.., t, ..], &d_loss_v_t);
 
             // pass state backward modified based on forget gate

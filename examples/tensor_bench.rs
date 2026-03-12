@@ -191,33 +191,33 @@ fn main() {
 
     println!("=== nn vs nn2 benchmark ({epochs} epochs, batch={batch}, seq={seq}) ===\n");
 
-    // // Transformer
-    // {
-    //     let d_in = 64;
-    //     let d_head = 8;
-    //     let n_head = 4;
-    //     println!("Config: d_in={d_in} d_head={d_head} n_head={n_head}");
-    //
-    //     transformer_v1(d_in, d_head, n_head, batch, seq, 5);
-    //     transformer_v2(d_in, d_head, n_head, batch, seq, 5);
-    //
-    //     let t1 = transformer_v1(d_in, d_head, n_head, batch, seq, epochs);
-    //     let t2 = transformer_v2(d_in, d_head, n_head, batch, seq, epochs);
-    //     print_result("Transformer", t1, t2, epochs);
-    // }
-    //
-    // // LSTM
-    // {
-    //     let d_model = 64;
-    //     println!("Config: d_model={d_model}");
-    //
-    //     lstm_v1(d_model, batch, seq, 5);
-    //     lstm_v2(d_model, batch, seq, 5);
-    //
-    //     let t1 = lstm_v1(d_model, batch, seq, epochs);
-    //     let t2 = lstm_v2(d_model, batch, seq, epochs);
-    //     print_result("LSTM", t1, t2, epochs);
-    // }
+    // Transformer
+    {
+        let d_in = 64;
+        let d_head = 8;
+        let n_head = 4;
+        println!("Config: d_in={d_in} d_head={d_head} n_head={n_head}");
+
+        transformer_v1(d_in, d_head, n_head, batch, seq, 5);
+        transformer_v2(d_in, d_head, n_head, batch, seq, 5);
+
+        let t1 = transformer_v1(d_in, d_head, n_head, batch, seq, epochs);
+        let t2 = transformer_v2(d_in, d_head, n_head, batch, seq, epochs);
+        print_result("Transformer", t1, t2, epochs);
+    }
+
+    // LSTM
+    {
+        let d_model = 64;
+        println!("Config: d_model={d_model}");
+
+        lstm_v1(d_model, batch, seq, 5);
+        lstm_v2(d_model, batch, seq, 5);
+
+        let t1 = lstm_v1(d_model, batch, seq, epochs);
+        let t2 = lstm_v2(d_model, batch, seq, epochs);
+        print_result("LSTM", t1, t2, epochs);
+    }
 
     // Gated Linear Attention
     {
