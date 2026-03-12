@@ -1,13 +1,17 @@
 use std::time::Instant;
 
 use nbml::{
-    Tensor, f::Activation, f::InitializationFn as InitV1, f2::InitializationFn as InitV2,
-    nn::Conv2D as Conv2DV1, nn::GatedLinearAttention as GLAV1, nn::LSTM as LSTMV1,
-    nn::Transformer as TransformerV1, nn2::GatedLinearAttention as GLAV2, nn2::LSTM as LSTMV2,
-    nn2::Transformer as TransformerV2, nn2::conv2d::Conv2D as Conv2DV2,
-    optim::adam::AdamW as AdamWV1, optim::optimizer::Optimizer as OptimizerV1,
-    optim::param::ToParams as ToParamsV1, optim2::Optimizer as OptimizerV2,
-    optim2::ToParams as ToParamsV2, optim2::adam::AdamW as AdamWV2,
+    Tensor, f::Activation,
+    nn::GatedLinearAttention as GLAV1, nn::LSTM as LSTMV1,
+    nn::Transformer as TransformerV1,
+    nn::Conv2D as Conv2DV1,
+    nn2::GatedLinearAttention as GLAV2, nn2::LSTM as LSTMV2,
+    nn2::Transformer as TransformerV2,
+    nn2::conv2d::Conv2D as Conv2DV2,
+    optim::adam::AdamW as AdamWV1,
+    optim::optimizer::Optimizer as OptimizerV1, optim::param::ToParams as ToParamsV1,
+    optim2::Optimizer as OptimizerV2, optim2::ToParams as ToParamsV2,
+    optim2::adam::AdamW as AdamWV2,
 };
 use ndarray::{Array2, Array3, Array4};
 
@@ -188,12 +192,8 @@ fn gla_v2(
 // --- Conv2D ---
 
 fn conv2d_v1(
-    c_in: usize,
-    c_out: usize,
-    k: usize,
-    batch: usize,
-    h: usize,
-    w: usize,
+    c_in: usize, c_out: usize, k: usize,
+    batch: usize, h: usize, w: usize,
     epochs: usize,
 ) -> f64 {
     let mut model = Conv2DV1::new(c_in, c_out, k, k, nbml::f::he);
@@ -217,12 +217,8 @@ fn conv2d_v1(
 }
 
 fn conv2d_v2(
-    c_in: usize,
-    c_out: usize,
-    k: usize,
-    batch: usize,
-    h: usize,
-    w: usize,
+    c_in: usize, c_out: usize, k: usize,
+    batch: usize, h: usize, w: usize,
     epochs: usize,
 ) -> f64 {
     let mut model = Conv2DV2::new(c_in, c_out, k, k, nbml::f2::he);
@@ -312,3 +308,4 @@ fn main() {
         print_result("Conv2D (im2col)", t1, t2, epochs);
     }
 }
+
