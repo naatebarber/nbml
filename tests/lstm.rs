@@ -8,7 +8,7 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn lstm_forward_and_step_compute_same_value() {
     let mut lstm = LSTM::new(12);
-    let x = Array3::random((1, 12, 12), Uniform::new(0., 1.));
+    let x = Array3::random((1, 12, 12), Uniform::new(0., 1.).unwrap());
 
     let pred_forward = lstm.forward(x.clone(), true);
 
@@ -29,7 +29,7 @@ fn lstm_forward_and_step_compute_same_value() {
 #[test]
 fn lstm_forward_and_scan_compute_same_value() {
     let mut lstm = LSTM::new(12);
-    let x = Array3::random((1, 12, 12), Uniform::new(0., 1.));
+    let x = Array3::random((1, 12, 12), Uniform::new(0., 1.).unwrap());
 
     let pred_forward = lstm.forward(x.clone(), false);
     let (h, _cell) = lstm.scan(&x);
@@ -50,7 +50,7 @@ fn lstm_sequence_pred() {
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
-    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.).unwrap());
 
     let batch = Array3::zeros((batch_size, seq_len - 2, features));
     let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
@@ -59,7 +59,7 @@ fn lstm_sequence_pred() {
         let a = 0.52;
         let b = 0.48;
 
-        let next = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f64> = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 
@@ -100,7 +100,7 @@ fn lstm_sequence_pred_step_forward() {
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
-    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.).unwrap());
 
     let batch = Array3::zeros((batch_size, seq_len - 2, features));
     let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
@@ -109,7 +109,7 @@ fn lstm_sequence_pred_step_forward() {
         let a = 0.52;
         let b = 0.48;
 
-        let next = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f64> = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 

@@ -5,7 +5,7 @@ use nbml::{
     optim::{adam::AdamW, optimizer::Optimizer},
 };
 use ndarray::{Array1, Array2, Array3, Axis};
-use rand::{Rng, rngs::ThreadRng};
+use rand::{RngExt, rngs::ThreadRng};
 
 fn model_optimizer(
     d_model: usize,

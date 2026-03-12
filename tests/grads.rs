@@ -18,7 +18,7 @@ fn attention_gradients() {
     let mut attn = AttentionHead::new(d_in, d_head, n_head);
 
     // Small random input
-    let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-0.5, 0.5));
+    let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-0.5, 0.5).unwrap());
 
     // No masking for simplicity (all ones = attend to everything)
     let mask = Array2::ones((batch_size, seq_len));
@@ -200,11 +200,11 @@ fn test_layernorm_gradients() {
     let mut ln = LayerNorm::new(features);
 
     // Small random input
-    let x = Array3::random((2, 3, features), Uniform::new(-1., 1.));
+    let x = Array3::random((2, 3, features), Uniform::new(-1., 1.).unwrap());
 
     // Analytical gradient via backward pass
     let y = ln.forward(x.clone(), true);
-    let d_loss = Array3::random(y.dim(), Uniform::new(0., 1.)); // Gradient from "loss"
+    let d_loss = Array3::random(y.dim(), Uniform::new(0., 1.).unwrap()); // Gradient from "loss"
     let dx_analytical = ln.backward(d_loss.clone());
 
     // Numerical gradient via finite differences

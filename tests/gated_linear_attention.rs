@@ -71,10 +71,10 @@ fn make_associative_recall_dataset(
 
     for b in 0..batch_size {
         let keys: Vec<Array1<f64>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
         let values: Vec<Array1<f64>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
 
         for i in 0..num_pairs {

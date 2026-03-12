@@ -79,7 +79,7 @@ fn generate_data(n_samples: usize, seq_len: usize, d_model: usize) -> (Array3<f6
         }
 
         // Add some noise
-        sequence = sequence + Array2::random((seq_len, d_model), Uniform::new(-0.1, 0.1));
+        sequence = sequence + Array2::random((seq_len, d_model), Uniform::new(-0.1, 0.1).unwrap());
 
         x_samples.push(sequence);
         y_samples.push(Array1::from_vec(vec![label]));

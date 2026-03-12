@@ -57,10 +57,10 @@ fn main() {
     optim.weight_decay = 0.001;
     optim.learning_rate = 0.0001;
 
-    let x1 = Array2::random((5, 50), Uniform::new(0., 1.));
+    let x1 = Array2::random((5, 50), Uniform::new(0., 1.).unwrap());
     let y1 = Array1::from_vec(vec![1.]).insert_axis(Axis(0));
 
-    let x2 = Array2::random((5, 50), Uniform::new(0., 1.));
+    let x2 = Array2::random((5, 50), Uniform::new(0., 1.).unwrap());
     let y2 = Array1::from_vec(vec![0.]).insert_axis(Axis(0));
 
     let x = stack(Axis(0), &[x1.view(), x2.view()]).unwrap();

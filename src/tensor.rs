@@ -51,7 +51,7 @@ impl Tensor {
 
     pub fn random_uniform(shape: impl IntoShape) -> Tensor {
         Self {
-            data: ArrayD::random(shape.into_shape(), Uniform::new(0., 1.)),
+            data: ArrayD::random(shape.into_shape(), Uniform::new(0., 1.).unwrap()),
         }
     }
 

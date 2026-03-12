@@ -2,7 +2,7 @@ use nbml::{
     nn::RNN,
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
-use ndarray::{Array3, Axis, concatenate, s};
+use ndarray::{Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
@@ -15,7 +15,7 @@ fn rnn_sequence_pred() {
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-3;
 
-    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.).unwrap());
 
     let batch = Array3::zeros((batch_size, seq_len - 2, features));
     let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
@@ -24,7 +24,7 @@ fn rnn_sequence_pred() {
         let a = 0.52;
         let b = 0.48;
 
-        let next = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f64> = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 

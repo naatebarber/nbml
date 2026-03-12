@@ -9,7 +9,7 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[ignore]
 fn linear_self_attention_learns_to_attend_to_highest() {
     fn make_dataset() -> (Array3<f64>, Array3<f64>) {
-        let mut x = Array3::random((1, 5, 5), Uniform::new(0., 1.));
+        let mut x = Array3::random((1, 5, 5), Uniform::new(0., 1.).unwrap());
         let high = 50.;
         x.slice_mut(s![0, 0, ..])
             .assign(&Array1::from_elem(5, high));

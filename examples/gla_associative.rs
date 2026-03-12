@@ -6,14 +6,14 @@ use nbml::{
     nn::GatedLinearAttention,
     optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
 };
-use rand::Rng;
+use rand::RngExt;
 
 pub const D_MODEL: usize = 32;
 pub const N_PAIRS: usize = 500;
 
 fn associative_recall_dataset(num_pairs: usize, d_model: usize) -> (Array2<f64>, Array2<f64>) {
-    let keys = Array2::random((num_pairs, d_model), Uniform::new(0., 10.));
-    let values = Array2::random((num_pairs, d_model), Uniform::new(0., 10.));
+    let keys = Array2::random((num_pairs, d_model), Uniform::new(0., 10.).unwrap());
+    let values = Array2::random((num_pairs, d_model), Uniform::new(0., 10.).unwrap());
 
     let mut sequence = Array2::zeros((num_pairs * 2 + 2, d_model));
 

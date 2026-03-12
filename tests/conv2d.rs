@@ -51,7 +51,7 @@ fn patchwise_conv2d_produces_correct_shapes() {
 }
 
 fn inversion_dataset() -> (Array4<f64>, Array4<f64>) {
-    let x = Array4::random((10, 1, 10, 10), Uniform::new(0., 1.)).round();
+    let x = Array4::random((10, 1, 10, 10), Uniform::new(0., 1.).unwrap()).round();
     let y = (&x - 1.).abs();
 
     (x, y)

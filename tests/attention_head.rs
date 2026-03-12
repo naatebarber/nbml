@@ -23,7 +23,7 @@ fn model_optimizer(
 #[test]
 fn encoder_vs_decoder() {
     let (mut attn, _optim) = model_optimizer(6, 2, 3);
-    let input = Array3::random((1, 6, 6), Uniform::new(0., 1.));
+    let input = Array3::random((1, 6, 6), Uniform::new(0., 1.).unwrap());
     let mask = Array2::ones((1, 6));
     let y_encoder = attn.forward(&input, &mask, false, false);
     let y_decoder = attn.forward(&input, &mask, true, false);
@@ -44,7 +44,7 @@ fn decoder_with_padding() {
 
     let (mut attn, _optim) = model_optimizer(d_model, d_head, n_head);
 
-    let input = Array3::random((1, 6, 6), Uniform::new(0., 1.));
+    let input = Array3::random((1, 6, 6), Uniform::new(0., 1.).unwrap());
     let mut mask = Array2::ones((1, 6));
     mask.slice_mut(s![0, 4..]).assign(&Array1::zeros(2));
 
@@ -67,7 +67,7 @@ fn encoder_selector() {
     let (mut attn, mut optim) = model_optimizer(10, 2, 5);
 
     let make_xy = || {
-        let mut x = Array2::random((4, 10), Uniform::new(0., 1.));
+        let mut x = Array2::random((4, 10), Uniform::new(0., 1.).unwrap());
         let selector = random_range(1..4);
         x.slice_mut(s![0, ..])
             .assign(&Array1::from_elem(10, selector as f64));

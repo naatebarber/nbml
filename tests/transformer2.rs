@@ -6,7 +6,7 @@ use nbml::{
     s,
     tensor::{Tensor2, Tensor3},
 };
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 
 const EMBED_DIM: usize = 16;
 const D_HEAD: usize = 8;

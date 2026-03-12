@@ -3,7 +3,7 @@ use core::f64;
 use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use ndarray_stats::QuantileExt;
-use rand::{Rng, rngs::ThreadRng};
+use rand::{RngExt, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 
 pub type ActivationFn = fn(&Array2<f64>) -> Array2<f64>;
@@ -111,7 +111,7 @@ pub fn d_softmax_cross_entropy(x: &Array2<f64>) -> Array2<f64> {
 
 pub fn he(shape: (usize, usize)) -> Array2<f64> {
     let bound = f64::sqrt(6.) / f64::sqrt(shape.0 as f64);
-    return Array2::random(shape, Uniform::new(-bound, bound));
+    return Array2::random(shape, Uniform::new(-bound, bound).unwrap());
 }
 
 pub fn xavier_normal(shape: (usize, usize)) -> Array2<f64> {
@@ -124,7 +124,7 @@ pub fn xavier_normal(shape: (usize, usize)) -> Array2<f64> {
 
 pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
     let bound = (6. / (shape.0 as f64 + shape.1 as f64)).sqrt();
-    return Array2::random(shape, Uniform::new(-bound, bound));
+    return Array2::random(shape, Uniform::new(-bound, bound).unwrap());
 }
 
 // LOSSES

@@ -13,7 +13,7 @@ fn main() {
     let mut attnhead = AttentionHead::new(300, 300, 20);
     let mut selfattn = SelfAttention::new(300, 300, 20);
 
-    let x = Array3::random((10, 300, 300), Uniform::new(0., 1.));
+    let x = Array3::random((10, 300, 300), Uniform::new(0., 1.).unwrap());
 
     let mask_3d = Array3::ones((10, 300, 300));
     let mask_2d = Array2::ones((10, 300));
