@@ -3,7 +3,8 @@ use nbml::{
     f2::he,
     nn2::conv2d::{Conv2D, PatchwiseConv2D},
     optim2::{Optimizer, ToParams, adam::AdamW},
-    s, tensor::Float,
+    s,
+    tensor::Float,
 };
 
 #[test]

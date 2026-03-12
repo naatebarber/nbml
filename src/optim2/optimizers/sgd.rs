@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{optim2::{Optimizer, ToParams}, tensor::Float};
+use crate::{
+    optim2::{Optimizer, ToParams},
+    tensor::Float,
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SGD {

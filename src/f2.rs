@@ -76,19 +76,19 @@ pub fn sigmoid(x: &Tensor) -> Tensor {
 pub fn d_sigmoid(x: &Tensor) -> Tensor {
     let s = sigmoid(x);
     let one_minus_s = s.mapv(|v| 1. - v);
-    &s * &one_minus_s
+    s * one_minus_s
 }
 
 pub fn softmax(x: &Tensor) -> Tensor {
     let maxes = x.max_axis(1).insert_axis(1);
     let d = (x - &maxes).exp();
     let sums = d.sum_axis(1).insert_axis(1);
-    &d / &sums
+    d / sums
 }
 
 pub fn d_softmax(s: &Tensor, g: &Tensor) -> Tensor {
     let dot = (g * s).sum_axis(1).insert_axis(1);
-    s * &(g - &dot)
+    s * (g - &dot)
 }
 
 pub fn d_softmax_cross_entropy(x: &Tensor) -> Tensor {

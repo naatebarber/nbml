@@ -676,7 +676,7 @@ macro_rules! impl_op {
         impl $trait<Tensor> for Tensor {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(self.data $op &rhs.data)
+                Tensor::from(self.data $op rhs.data)
             }
         }
 

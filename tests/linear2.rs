@@ -2,7 +2,8 @@ use nbml::{
     Tensor,
     f2::xavier_normal,
     layers::Linear,
-    optim2::{Optimizer, ToParams, adam::AdamW}, tensor::Float,
+    optim2::{Optimizer, ToParams, adam::AdamW},
+    tensor::Float,
 };
 
 #[test]
