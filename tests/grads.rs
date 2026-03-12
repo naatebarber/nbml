@@ -18,7 +18,10 @@ fn attention_gradients() {
     let mut attn = AttentionHead::new(d_in, d_head, n_head);
 
     // Small random input
-    let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-0.5, 0.5).unwrap());
+    let x = Array3::random(
+        (batch_size, seq_len, d_in),
+        Uniform::new(-0.5, 0.5).unwrap(),
+    );
 
     // No masking for simplicity (all ones = attend to everything)
     let mask = Array2::ones((batch_size, seq_len));

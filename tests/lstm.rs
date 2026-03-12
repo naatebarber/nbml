@@ -59,7 +59,8 @@ fn lstm_sequence_pred() {
         let a = 0.52;
         let b = 0.48;
 
-        let next: Array2<f64> = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f64> =
+            a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 
@@ -109,7 +110,8 @@ fn lstm_sequence_pred_step_forward() {
         let a = 0.52;
         let b = 0.48;
 
-        let next: Array2<f64> = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f64> =
+            a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 

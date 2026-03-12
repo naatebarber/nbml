@@ -12,7 +12,8 @@ fn generate_linear_recurrence(batch: usize, len: usize, feat: usize) -> Array3<f
     let mut seq = concatenate![Axis(1), seed.view(), rest.view()];
 
     for t in 2..len {
-        let next: Array2<f64> = 0.52 * &seq.slice(s![.., t - 1, ..]) + 0.48 * &seq.slice(s![.., t - 2, ..]);
+        let next: Array2<f64> =
+            0.52 * &seq.slice(s![.., t - 1, ..]) + 0.48 * &seq.slice(s![.., t - 2, ..]);
         seq.slice_mut(s![.., t, ..]).assign(&next);
     }
     seq

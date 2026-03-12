@@ -31,7 +31,10 @@ fn identity() {
     println!("Test 1: Identity Task (learns to output = input)");
     println!("This tests if the transformer can learn with residual connections\n");
 
-    let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.).unwrap());
+    let x = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
     let y_target = x.clone();
 
     let mut losses = Vec::new();
@@ -89,7 +92,10 @@ pub fn mean_pooling() {
     let mut optim2 = AdamW::default().with(&mut transformer2);
     optim2.learning_rate = 1e-3;
 
-    let x2 = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.).unwrap());
+    let x2 = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
     let mean = x2.mean_axis(Axis(1)).unwrap().insert_axis(Axis(1));
     let y_target2 = mean
         .broadcast((BATCH_SIZE, SEQ_LEN, EMBED_DIM))
@@ -145,7 +151,10 @@ fn gradient_flow() {
         vec![(EMBED_DIM, EMBED_DIM, Activation::Relu)],
     );
 
-    let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.).unwrap());
+    let x = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
     let mask = Array2::ones((x.dim().0, x.dim().1));
     let y = transformer.forward(x.clone(), mask, true);
 
@@ -199,8 +208,14 @@ fn overfitting() {
     optim.learning_rate = 6e-3; // Higher learning rate for faster overfitting
 
     // Fixed small dataset - should memorize perfectly
-    let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.).unwrap());
-    let y_target = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.).unwrap());
+    let x = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
+    let y_target = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
 
     let mut final_loss = 1.0;
 

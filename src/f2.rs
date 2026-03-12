@@ -1,7 +1,7 @@
 use crate::s;
 use crate::tensor::{Float, Tensor};
 use rand::RngExt;
-use rand::{rngs::ThreadRng};
+use rand::rngs::ThreadRng;
 use serde::{Deserialize, Serialize};
 
 pub type ActivationFn = fn(&Tensor) -> Tensor;
