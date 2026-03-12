@@ -112,7 +112,7 @@ impl GatedLinearAttention {
             state = &state * forget_expanded + kv;
 
             // (B, d_q) -> (B, d_q, 1)
-            let attn_t = state.broadcast_expand(&q_t, 2).sum_axis(1);
+            let attn_t = (&state * q_t.insert_axis(2)).sum_axis(1);
 
             attn.slice_assign(s![.., t, ..], &attn_t);
 
@@ -176,7 +176,8 @@ impl GatedLinearAttention {
 
             // state_t * d_loss_t
             // (B, d_k, d_v) * (B, 1, d_v) -> (B, d_k, d_v)
-            let d_loss_q_t = state_next.broadcast_expand(&d_loss_t, 1).sum_axis(2);
+
+            let d_loss_q_t = (&state_next * d_loss_t.insert_axis(1)).sum_axis(2);
             d_loss_q.slice_assign(s![.., t, ..], &d_loss_q_t);
 
             // q_t * d_loss_t
@@ -189,21 +190,20 @@ impl GatedLinearAttention {
             // (B, d_k, d_v)
             let d_forget_expanded = &d_loss_state * state_prev;
 
-            let d_forget_alpha = d_forget_expanded.broadcast_expand(&forget_beta, 1).sum_axis(2);
-            let d_forget_beta = d_forget_expanded.broadcast_expand(&forget_alpha, 2).sum_axis(1);
-
+            let d_forget_alpha = (&d_forget_expanded * &forget_beta.insert_axis(1)).sum_axis(2);
+            let d_forget_beta = (&d_forget_expanded * &forget_alpha.insert_axis(2)).sum_axis(1);
             let d_forget_t = Tensor::concatenate(1, &[&d_forget_alpha, &d_forget_beta]);
             d_loss_forget.slice_assign(s![.., t, ..], &d_forget_t);
 
             // (B, d_v) -> (B, 1, d_v)
             // (B, 1, d_v) * (B, d_k, d_v) -> (B, d_k, sum(d_v)) -> (B, d_k)
 
-            let d_loss_k_t = d_loss_state.broadcast_expand(&v_t, 1).sum_axis(2);
+            let d_loss_k_t = (&d_loss_state * &v_t.insert_axis(1)).sum_axis(2);
             d_loss_k.slice_assign(s![.., t, ..], &d_loss_k_t);
 
             // (B, d_k) -> (B, d_k, 1)
             // (B, d_k, 1) * (B, d_k, d_v) -> (B, sum(d_k), d_v) -> (B, d_v)
-            let d_loss_v_t = d_loss_state.broadcast_expand(&k_t, 2).sum_axis(1);
+            let d_loss_v_t = (&d_loss_state * &k_t.insert_axis(2)).sum_axis(1);
             d_loss_v.slice_assign(s![.., t, ..], &d_loss_v_t);
 
             // pass state backward modified based on forget gate

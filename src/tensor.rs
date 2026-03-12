@@ -3,7 +3,9 @@ use std::{
     usize,
 };
 
-use ndarray::{ArcArrayD, Axis, Dimension, Ix1, Ix2, Ix3, SliceInfoElem, concatenate, stack};
+use ndarray::{
+    ArcArrayD, Axis, Dimension, Ix1, Ix2, Ix3, Ix4, Ix5, SliceInfoElem, concatenate, stack,
+};
 use ndarray_rand::{
     RandomExt,
     rand_distr::{Normal, Uniform},
@@ -263,7 +265,10 @@ impl Tensor {
     }
 
     pub fn outer(&self, rhs: &Self) -> Tensor {
-        assert!(self.rank() == rhs.rank(), "attempted to take outer product between two differently-ranked tensors");
+        assert!(
+            self.rank() == rhs.rank(),
+            "attempted to take outer product between two differently-ranked tensors"
+        );
 
         match (self.rank(), rhs.rank()) {
             (0, 0) => self * rhs,
@@ -272,43 +277,18 @@ impl Tensor {
                 let right = rhs.data.view().into_dimensionality::<Ix1>().unwrap();
                 let outer = &left.insert_axis(Axis(1)) * &right.insert_axis(Axis(0));
                 Tensor::from(outer.into_dyn())
-            },
+            }
             (2, 2) => {
                 let left = self.data.view().into_dimensionality::<Ix2>().unwrap();
                 let right = rhs.data.view().into_dimensionality::<Ix2>().unwrap();
                 let outer = &left.insert_axis(Axis(2)) * &right.insert_axis(Axis(1));
                 Tensor::from(outer.into_dyn())
-            },
+            }
             _ => panic!(
                 "outer product only supports rank pairs (0, 0), (1, 1), (2, 2), attempted ({}, {})",
                 self.rank(),
                 rhs.rank()
-            )
-        }
-    }
-
-    pub fn broadcast_expand(&self, rhs: &Self, axis: usize) -> Tensor {
-        assert!(self.rank() == rhs.rank() + 1, "attempted to apply broadcast expand product where self.rank != rhs.rank + 1");
-        assert!(axis <= rhs.rank(), "cannot apply broadcast expand across new axis {} for tensor rank {}", axis, rhs.rank());
-
-        match (self.rank(), rhs.rank()) {
-            (2, 1) => {
-                let left = self.data.view().into_dimensionality::<Ix2>().unwrap(); 
-                let right = rhs.data.view().into_dimensionality::<Ix1>().unwrap(); 
-                let b = &left * &right.insert_axis(Axis(axis));
-                Tensor::from(b.into_dyn())
-            },
-            (3, 2) => {
-                let left = self.data.view().into_dimensionality::<Ix3>().unwrap();
-                let right = rhs.data.view().into_dimensionality::<Ix2>().unwrap();
-                let b = &left * &right.insert_axis(Axis(axis));
-                Tensor::from(b.into_dyn())
-            },
-            _ => panic!(
-                "broadcast expand only supports rank pairs (2, 1), (3, 2), attempted ({}, {})",
-                self.rank(),
-                rhs.rank(),
-            )
+            ),
         }
     }
 
@@ -721,36 +701,63 @@ impl_index!(2);
 impl_index!(3);
 impl_index!(4);
 
+macro_rules! fixed_rank_op {
+  ($self:expr, $rhs:expr, $IxA:ty, $IxB:ty, $op:tt) => {{
+      let a = $self.data.view().into_dimensionality::<$IxA>().unwrap();
+      let b = $rhs.data.view().into_dimensionality::<$IxB>().unwrap();
+      Tensor::from((&a $op &b).into_dyn())
+  }};
+}
+
+macro_rules! n_fixed_rank_op {
+    ($self:expr, $rhs:expr, $op:tt) => {{
+        match ($self.rank(), $rhs.rank()) {
+            (1, 1) => fixed_rank_op!($self, $rhs, Ix1, Ix1, $op),
+            (2, 1) => fixed_rank_op!($self, $rhs, Ix2, Ix1, $op),
+            (2, 2) => fixed_rank_op!($self, $rhs, Ix2, Ix2, $op),
+            (3, 2) => fixed_rank_op!($self, $rhs, Ix3, Ix2, $op),
+            (3, 3) => fixed_rank_op!($self, $rhs, Ix3, Ix3, $op),
+            (4, 3) => fixed_rank_op!($self, $rhs, Ix4, Ix3, $op),
+            (4, 4) => fixed_rank_op!($self, $rhs, Ix4, Ix4, $op),
+            (5, 4) => fixed_rank_op!($self, $rhs, Ix5, Ix4, $op),
+            (5, 5) => fixed_rank_op!($self, $rhs, Ix5, Ix5, $op),
+            _ => {
+                Tensor::from(&$self.data.view() $op &$rhs.data.view())
+            }
+        }
+    }}
+}
+
 macro_rules! impl_op {
     ($trait:ident, $method:ident, $op:tt) => {
         impl $trait<Tensor> for Tensor {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(self.data $op rhs.data)
+                n_fixed_rank_op!(self, rhs, $op)
             }
         }
 
         impl $trait<&Tensor> for &Tensor {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(&self.data.view() $op &rhs.data.view())
+                n_fixed_rank_op!(self, rhs, $op)
             }
         }
 
         impl $trait<&Tensor> for Tensor {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(self.data $op &rhs.data.view())
+                n_fixed_rank_op!(self, rhs, $op)
             }
         }
 
         impl $trait<Tensor> for &Tensor {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(&self.data.view() $op rhs.data)
+                n_fixed_rank_op!(self, rhs, $op)
             }
         }
-    }
+    };
 }
 
 impl_op!(Add, add, +);

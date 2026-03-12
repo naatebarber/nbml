@@ -1,5 +1,5 @@
+use ndarray::{ArcArrayD, Array3, ArrayD, Ix3};
 use std::time::Instant;
-use ndarray::{Array3, ArrayD, ArcArrayD, Ix3};
 
 const WARMUP: usize = 10;
 const ITERS: usize = 500;
@@ -46,8 +46,12 @@ fn main() {
 
         bench(
             "&Array3 * &Array3 vs &ArrayD * &ArrayD",
-            || { let _ = &a3 * &b3; },
-            || { let _ = &ad * &bd; },
+            || {
+                let _ = &a3 * &b3;
+            },
+            || {
+                let _ = &ad * &bd;
+            },
         );
     }
 
@@ -60,8 +64,12 @@ fn main() {
 
         bench(
             "&Array3 * &Array3 vs &ArcArrayD * &ArcArrayD",
-            || { let _ = &a3 * &b3; },
-            || { let _ = &ad * &bd; },
+            || {
+                let _ = &a3 * &b3;
+            },
+            || {
+                let _ = &ad * &bd;
+            },
         );
     }
 
@@ -74,8 +82,12 @@ fn main() {
 
         bench(
             "&Array3 * &Array3 vs &ViewD * &ViewD",
-            || { let _ = &a3 * &b3; },
-            || { let _ = &ad.view() * &bd.view(); },
+            || {
+                let _ = &a3 * &b3;
+            },
+            || {
+                let _ = &ad.view() * &bd.view();
+            },
         );
     }
 
@@ -88,7 +100,9 @@ fn main() {
 
         bench(
             "&Array3 * &Array3 vs into_dim::<Ix3> * Ix3",
-            || { let _ = &a3 * &b3; },
+            || {
+                let _ = &a3 * &b3;
+            },
             || {
                 let av = ad.view().into_dimensionality::<Ix3>().unwrap();
                 let bv = bd.view().into_dimensionality::<Ix3>().unwrap();
@@ -106,7 +120,9 @@ fn main() {
 
         bench(
             "&Array3 * &Array3 vs ArcArrayD->Ix3 * Ix3",
-            || { let _ = &a3 * &b3; },
+            || {
+                let _ = &a3 * &b3;
+            },
             || {
                 let av = ad.view().into_dimensionality::<Ix3>().unwrap();
                 let bv = bd.view().into_dimensionality::<Ix3>().unwrap();
@@ -127,8 +143,12 @@ fn main() {
 
         bench(
             "broadcast: &Array3 * &Array3 vs &ArrayD",
-            || { let _ = &a3 * &b3; },
-            || { let _ = &ad * &bd; },
+            || {
+                let _ = &a3 * &b3;
+            },
+            || {
+                let _ = &ad * &bd;
+            },
         );
     }
 
@@ -141,7 +161,9 @@ fn main() {
 
         bench(
             "broadcast: &Array3 * &Array3 vs ->Ix3 * Ix3",
-            || { let _ = &a3 * &b3; },
+            || {
+                let _ = &a3 * &b3;
+            },
             || {
                 let av = ad.view().into_dimensionality::<Ix3>().unwrap();
                 let bv = bd.view().into_dimensionality::<Ix3>().unwrap();
@@ -161,13 +183,19 @@ fn main() {
 
         bench(
             "&Array3 + &Array3 vs &ArrayD + &ArrayD",
-            || { let _ = &a3 + &b3; },
-            || { let _ = &ad + &bd; },
+            || {
+                let _ = &a3 + &b3;
+            },
+            || {
+                let _ = &ad + &bd;
+            },
         );
 
         bench(
             "&Array3 + &Array3 vs ->Ix3 + Ix3",
-            || { let _ = &a3 + &b3; },
+            || {
+                let _ = &a3 + &b3;
+            },
             || {
                 let av = ad.view().into_dimensionality::<Ix3>().unwrap();
                 let bv = bd.view().into_dimensionality::<Ix3>().unwrap();
