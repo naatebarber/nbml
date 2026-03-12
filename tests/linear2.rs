@@ -2,7 +2,7 @@ use nbml::{
     Tensor,
     f2::xavier_normal,
     layers::Linear,
-    optim2::{Optimizer, ToParams, adam::AdamW},
+    optim2::{Optimizer, ToParams, adam::AdamW}, tensor::Float,
 };
 
 #[test]
@@ -15,11 +15,11 @@ fn linear_learns_identity() {
     let x = Tensor::random_uniform((16, d)) * 2.0 - 1.0;
     let y = x.clone();
 
-    let mut final_loss = f64::MAX;
+    let mut final_loss = f64::MAX as Float;
     for epoch in 0..1000 {
         let y_pred = model.forward(&x, true);
         let loss = (&y_pred - &y).powi(2).mean();
-        let n = y_pred.shape().iter().product::<usize>() as f64;
+        let n = y_pred.shape().iter().product::<usize>() as Float;
         let d_loss = (&y_pred - &y) * (2.0 / n);
 
         model.backward(&d_loss);

@@ -3,7 +3,7 @@ use nbml::{
     f2::{d_relu, he, relu, xavier_normal},
     layers::{LayerNorm, Linear},
     optim2::{Optimizer, Param, ToParams, adam::AdamW},
-    tensor::Tensor3,
+    tensor::{Float, Tensor3},
     util::Cache,
 };
 
@@ -78,8 +78,8 @@ fn layernorm_output_is_normalized() {
                 sum += v;
                 sum_sq += v * v;
             }
-            let mean = sum / d as f64;
-            let var = sum_sq / d as f64 - mean * mean;
+            let mean = sum / d as Float;
+            let var = sum_sq / d as Float - mean * mean;
 
             assert!(
                 mean.abs() < 1e-6,
@@ -175,7 +175,7 @@ fn layernorm_trains_in_model() {
     for epoch in 0..2000 {
         let y_pred = model.forward(x.clone(), true);
         let loss = (&y_pred - &y).powi(2).mean();
-        let n = y_pred.shape().iter().product::<usize>() as f64;
+        let n = y_pred.shape().iter().product::<usize>() as Float;
         let d_loss = (&y_pred - &y) * (2.0 / n);
 
         model.backward(d_loss);

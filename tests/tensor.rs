@@ -1,5 +1,5 @@
 use nbml::s;
-use nbml::tensor::{SliceAxis, Tensor};
+use nbml::tensor::{Float, SliceAxis, Tensor};
 
 // ── Initialization ──────────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ fn dim4_wrong_rank() {
 
 #[test]
 fn exp() {
-    let e = std::f64::consts::E;
+    let e = std::f64::consts::E as Float;
     let r = Tensor::from_elem(2, 1.0).exp();
     assert!((r[[0]] - e).abs() < 1e-10);
     assert!((r[[1]] - e).abs() < 1e-10);
@@ -133,7 +133,7 @@ fn exp() {
 
 #[test]
 fn ln() {
-    let e = std::f64::consts::E;
+    let e = std::f64::consts::E as Float;
 
     // ln(e) = 1
     let r = Tensor::from_elem(2, e).ln();
@@ -236,7 +236,7 @@ fn std_dev() {
 
     // sample std (ddof=1)
     let sample_std = t.std(1.0);
-    assert!((sample_std - (32.0_f64 / 7.0).sqrt()).abs() < 1e-10);
+    assert!((sample_std - (32.0 as Float / 7.0).sqrt()).abs() < 1e-10);
 
     // constant tensor has zero std
     assert_eq!(Tensor::from_elem((2, 3), 5.0).std(0.0), 0.0);

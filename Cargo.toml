@@ -17,3 +17,4 @@ serde = { version = "1.0.228", features = ["derive", "rc"] }
 plotly = "0.14.1"
 serde_json = "1.0.149"
 serde-binary = "0.5.0"
+matrixmultiply = "0.3"

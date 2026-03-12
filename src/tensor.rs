@@ -3,7 +3,7 @@ use std::{
     usize,
 };
 
-use ndarray::{ArrayD, Axis, Dimension, Ix1, Ix2, SliceInfoElem, concatenate, stack};
+use ndarray::{ArcArrayD, Axis, Dimension, Ix1, Ix2, SliceInfoElem, concatenate, stack};
 use ndarray_rand::{
     RandomExt,
     rand_distr::{Normal, Uniform},
@@ -15,49 +15,49 @@ pub type Float = f64;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Tensor {
-    data: ArrayD<Float>,
+    data: ArcArrayD<Float>,
 }
 
 impl Tensor {
-    fn from(data: ArrayD<Float>) -> Tensor {
-        Self { data }
+    fn from(data: impl Into<ArcArrayD<Float>>) -> Tensor {
+        Self { data: data.into() }
     }
 
     // Initialization
 
     pub fn zeros(shape: impl IntoShape) -> Tensor {
         Self {
-            data: ArrayD::zeros(shape.into_shape()),
+            data: ArcArrayD::zeros(shape.into_shape()),
         }
     }
 
     pub fn ones(shape: impl IntoShape) -> Tensor {
         Self {
-            data: ArrayD::ones(shape.into_shape()),
+            data: ArcArrayD::ones(shape.into_shape()),
         }
     }
 
     pub fn from_elem(shape: impl IntoShape, elem: Float) -> Tensor {
         Self {
-            data: ArrayD::from_elem(shape.into_shape(), elem),
+            data: ArcArrayD::from_elem(shape.into_shape(), elem),
         }
     }
 
     pub fn random_normal(shape: impl IntoShape) -> Tensor {
         Self {
-            data: ArrayD::random(shape.into_shape(), Normal::new(0., 1.).unwrap()),
+            data: ArcArrayD::random(shape.into_shape(), Normal::new(0., 1.).unwrap()),
         }
     }
 
     pub fn random_uniform(shape: impl IntoShape) -> Tensor {
         Self {
-            data: ArrayD::random(shape.into_shape(), Uniform::new(0., 1.).unwrap()),
+            data: ArcArrayD::random(shape.into_shape(), Uniform::new(0., 1.).unwrap()),
         }
     }
 
     pub fn from_vec(shape: impl IntoShape, data: Vec<Float>) -> Tensor {
         Self {
-            data: ArrayD::from_shape_vec(shape.into_shape(), data).unwrap(),
+            data: ArcArrayD::from_shape_vec(shape.into_shape(), data).unwrap(),
         }
     }
 
@@ -92,7 +92,7 @@ impl Tensor {
     }
 
     pub fn zeros_like(&self) -> Tensor {
-        Tensor::from(&self.data * 0.)
+        Tensor::zeros(self.shape())
     }
 
     // Global reductions
@@ -238,10 +238,7 @@ impl Tensor {
 
     pub fn dot(&self, rhs: &Self) -> Tensor {
         match (self.rank(), rhs.rank()) {
-            (0, 0) => self * rhs,
-            (1, 0) => self * rhs,
-            (0, 1) => self * rhs,
-            (1, 1) => self * rhs,
+            (0, 0) | (1, 0) | (0, 1) | (1, 1) => self * rhs,
             (1, 2) => {
                 let left = self.data.view().into_dimensionality::<Ix1>().unwrap();
                 let right = rhs.data.view().into_dimensionality::<Ix2>().unwrap();
@@ -273,7 +270,7 @@ impl Tensor {
     }
 
     pub fn permute(&self, axes: &[usize]) -> Tensor {
-        Tensor::from(self.data.view().permuted_axes(axes).to_owned())
+        Tensor::from(self.data.clone().permuted_axes(axes))
     }
 
     pub fn reshape(mut self, shape: impl IntoShape) -> Self {
@@ -288,7 +285,7 @@ impl Tensor {
     }
 
     pub fn t(&self) -> Tensor {
-        Tensor::from(self.data.view().reversed_axes().to_owned())
+        Tensor::from(self.data.clone().reversed_axes())
     }
 
     pub fn insert_axis(&self, axis: usize) -> Tensor {
@@ -298,7 +295,7 @@ impl Tensor {
             axis,
             self.rank()
         );
-        Tensor::from(self.data.view().insert_axis(Axis(axis)).to_owned())
+        Tensor::from(self.data.clone().insert_axis(Axis(axis)))
     }
 
     pub fn remove_axis(&self, axis: usize) -> Tensor {
@@ -308,7 +305,7 @@ impl Tensor {
             axis,
             self.rank()
         );
-        Tensor::from(self.data.view().remove_axis(Axis(axis)).to_owned())
+        Tensor::from(self.data.clone().remove_axis(Axis(axis)))
     }
 
     pub fn sum_axis(&self, axis: usize) -> Tensor {
@@ -318,7 +315,7 @@ impl Tensor {
             axis,
             self.rank()
         );
-        Tensor::from(self.data.view().sum_axis(Axis(axis)).to_owned())
+        Tensor::from(self.data.sum_axis(Axis(axis)))
     }
 
     pub fn mean_axis(&self, axis: usize) -> Tensor {
@@ -330,7 +327,7 @@ impl Tensor {
         );
         let shape = self.shape();
         let mut tensor = self.sum_axis(axis);
-        tensor /= shape[axis] as f64;
+        tensor /= shape[axis] as Float;
         tensor
     }
 
@@ -397,7 +394,7 @@ impl Tensor {
             slice.len()
         );
         let ndarray_slice = Tensor::slice_axis_to_ndarray(slice);
-        Tensor::from(self.data.view().slice(ndarray_slice.as_slice()).to_owned())
+        Tensor::from(self.data.clone().slice_move(ndarray_slice.as_slice()))
     }
 
     pub fn slice_assign(&mut self, slice: &[SliceAxis], assign: &Tensor) {
@@ -679,7 +676,7 @@ macro_rules! impl_op {
         impl $trait<Tensor> for Tensor {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(&self.data $op &rhs.data)
+                Tensor::from(self.data $op &rhs.data)
             }
         }
 
@@ -693,14 +690,14 @@ macro_rules! impl_op {
         impl $trait<&Tensor> for Tensor {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(&self.data $op &rhs.data)
+                Tensor::from(self.data $op &rhs.data)
             }
         }
 
         impl $trait<Tensor> for &Tensor {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(&self.data $op &rhs.data)
+                Tensor::from(&self.data $op rhs.data)
             }
         }
     }
@@ -744,21 +741,21 @@ macro_rules! impl_primitive_op {
         impl $trait<$primitive> for &Tensor {
             type Output = Tensor;
             fn $method(self, rhs: $primitive) -> Tensor {
-                Tensor::from(self.data.to_owned() $op rhs)
+                Tensor::from(&self.data $op rhs)
             }
         }
 
         impl $trait<Tensor> for $primitive {
             type Output = Tensor;
             fn $method(self, rhs: Tensor) -> Tensor {
-                Tensor::from(self $op rhs.data.to_owned())
+                Tensor::from(self $op rhs.data)
             }
         }
 
         impl $trait<&Tensor> for $primitive {
             type Output = Tensor;
             fn $method(self, rhs: &Tensor) -> Tensor {
-                Tensor::from(self $op rhs.data.to_owned())
+                Tensor::from(self $op &rhs.data)
             }
         }
     }

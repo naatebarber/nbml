@@ -3,7 +3,7 @@ use nbml::{
     f2::he,
     nn2::conv2d::{Conv2D, PatchwiseConv2D},
     optim2::{Optimizer, ToParams, adam::AdamW},
-    s,
+    s, tensor::Float,
 };
 
 #[test]
@@ -118,7 +118,7 @@ fn patchwise_conv2d_trains_inversion() {
         losses.push(loss);
     }
 
-    let avg_loss = losses.iter().sum::<f64>() / losses.len() as f64;
+    let avg_loss = losses.iter().sum::<Float>() / losses.len() as Float;
     let max_loss = 0.1;
 
     assert!(

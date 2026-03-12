@@ -1,5 +1,3 @@
-use std::f64;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -68,7 +66,7 @@ impl Attention {
             let v_i = v.slice(s![i, .., ..]);
 
             let scores = q_i.dot(&k_i.t());
-            let scores = (scores / (features_k as f64).sqrt()) + &mask.slice(s![i, .., ..]);
+            let scores = (scores / (features_k as Float).sqrt()) + &mask.slice(s![i, .., ..]);
             let weights = f::softmax(&scores);
 
             let out = weights.dot(&v_i);
@@ -103,7 +101,7 @@ impl Attention {
 
             let d_weights = d_loss_i.dot(&v_i.t());
             let d_scores = f::d_softmax(&weights_i.to_owned(), &d_weights);
-            let d_scores = d_scores / (features_k as f64).sqrt();
+            let d_scores = d_scores / (features_k as Float).sqrt();
 
             let d_k_i_t = q_i.t().dot(&d_scores);
             let d_k_i = d_k_i_t.t();

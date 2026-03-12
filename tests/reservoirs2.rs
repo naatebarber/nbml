@@ -5,7 +5,7 @@ use nbml::{
     nn2::reservoirs::{RNNReservoir, SNNReservoir},
     optim2::{Optimizer, ToParams, adam::AdamW},
     s,
-    tensor::{Tensor2, Tensor3},
+    tensor::{Float, Tensor2, Tensor3},
 };
 
 // ── ESN-style tests (RNNReservoir + Linear) ─────────────────────────
@@ -201,7 +201,7 @@ fn lsm_temporal_classification() {
         let noise = Tensor::random_uniform(seq_len) * 0.1 - 0.05;
 
         for t in 0..seq_len {
-            let frac = t as f64 / seq_len as f64;
+            let frac = t as Float / seq_len as Float;
             let val = if b < samples_per_class {
                 frac + noise[[t]]
             } else {
@@ -293,10 +293,10 @@ fn lsm_heterogeneous_delta() {
 
     // random per-step deltas in [0.02, 0.3]
     let deltas_tensor = Tensor::random_uniform(seq_len) * 0.28 + 0.02;
-    let deltas: Vec<f64> = deltas_tensor.to_vec();
+    let deltas: Vec<Float> = deltas_tensor.to_vec();
 
     // cumulative time for signal generation
-    let mut cum_time = vec![0.0f64; seq_len + 1];
+    let mut cum_time = vec![0.0; seq_len + 1];
     for t in 0..seq_len {
         cum_time[t + 1] = cum_time[t] + deltas[t];
     }
@@ -312,7 +312,7 @@ fn lsm_heterogeneous_delta() {
         for t in 0..seq_len {
             let frac = cum_time[t + 1] / total_time;
             let val = if b < samples_per_class {
-                (2.0 * std::f64::consts::PI * frac).sin() + noise[[t]]
+                (2.0 * std::f64::consts::PI as Float * frac).sin() + noise[[t]]
             } else {
                 (1.0 - frac) + noise[[t]]
             };

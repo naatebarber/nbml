@@ -4,7 +4,7 @@ use nbml::{
     nn2::Transformer,
     optim2::{Optimizer, ToParams, adam::AdamW},
     s,
-    tensor::{Tensor2, Tensor3},
+    tensor::{Float, Tensor2, Tensor3},
 };
 use rand::{RngExt, rng};
 
@@ -37,7 +37,7 @@ fn identity() {
         let y_pred = transformer.forward(x.clone(), mask, true);
         let loss = (&y_pred - &y_target).mapv(|v| v.powi(2)).mean();
         let d_loss =
-            (&y_pred - &y_target) * 2.0 / (y_pred.shape().iter().product::<usize>() as f64);
+            (&y_pred - &y_target) * 2.0 / (y_pred.shape().iter().product::<usize>() as Float);
 
         transformer.backward(d_loss);
         optim.step(&mut transformer);
@@ -92,7 +92,7 @@ pub fn mean_pooling() {
         let y_pred = transformer2.forward(x2.clone(), mask, true);
         let loss = (&y_pred - &y_target2).mapv(|v| v.powi(2)).mean();
         let d_loss =
-            (&y_pred - &y_target2) * 2.0 / (y_pred.shape().iter().product::<usize>() as f64);
+            (&y_pred - &y_target2) * 2.0 / (y_pred.shape().iter().product::<usize>() as Float);
 
         transformer2.backward(d_loss);
         optim2.step(&mut transformer2);
@@ -186,7 +186,7 @@ fn overfitting() {
         let y_pred = transformer.forward(x.clone(), mask, true);
         let loss = (&y_pred - &y_target).mapv(|v| v.powi(2)).mean();
         let d_loss =
-            (&y_pred - &y_target) * 2.0 / (y_pred.shape().iter().product::<usize>() as f64);
+            (&y_pred - &y_target) * 2.0 / (y_pred.shape().iter().product::<usize>() as Float);
 
         transformer.backward(d_loss);
         optim.step(&mut transformer);
@@ -431,7 +431,7 @@ fn memorize_one_delayed_copy() {
         y.slice_assign(s![0, i + 5, ..], v);
     }
 
-    let mut final_loss = f64::MAX;
+    let mut final_loss = f64::MAX as Float;
 
     for e in 0..5000 {
         let mask = Tensor2::ones((1, 10));

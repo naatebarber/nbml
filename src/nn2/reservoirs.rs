@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f2 as f, s,
-    tensor::{Tensor1, Tensor2, Tensor3},
+    tensor::{Float, Tensor1, Tensor2, Tensor3},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -27,7 +27,7 @@ impl RNNReservoir {
         }
     }
 
-    pub fn set_spectral_radius(&mut self, desired: f64, n: usize) -> f64 {
+    pub fn set_spectral_radius(&mut self, desired: Float, n: usize) -> Float {
         let lambda = f::calculate_spectral_radius(&self.w_r, n);
         self.w_r *= desired / lambda;
         f::calculate_spectral_radius(&self.w_r, n)
@@ -94,21 +94,21 @@ impl SNNReservoir {
         }
     }
 
-    pub fn set_threshold_range(&mut self, low: f64, high: f64) {
+    pub fn set_threshold_range(&mut self, low: Float, high: Float) {
         self.thresholds = Tensor1::random_uniform(self.d_hidden) * (high - low) + low;
     }
 
-    pub fn set_tau_range(&mut self, low: f64, high: f64) {
+    pub fn set_tau_range(&mut self, low: Float, high: Float) {
         self.taus = Tensor1::random_uniform(self.d_hidden) * (high - low) + low;
     }
 
-    pub fn set_spectral_radius(&mut self, desired: f64, n: usize) -> f64 {
+    pub fn set_spectral_radius(&mut self, desired: Float, n: usize) -> Float {
         let lambda = f::calculate_spectral_radius(&self.w_r, n);
         self.w_r *= desired / lambda;
         f::calculate_spectral_radius(&self.w_r, n)
     }
 
-    pub fn step(&self, x: &Tensor2, state: &mut Tensor2, delta: f64) {
+    pub fn step(&self, x: &Tensor2, state: &mut Tensor2, delta: Float) {
         let decay = self.taus.mapv(|t| (-delta / t).exp()).insert_axis(0);
         *state *= &decay;
         *state += &x.dot(&self.w_p);

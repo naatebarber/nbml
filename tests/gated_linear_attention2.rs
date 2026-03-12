@@ -3,7 +3,7 @@ use nbml::{
     nn2::GatedLinearAttention,
     optim2::{Optimizer, ToParams, adam::AdamW},
     s,
-    tensor::Tensor3,
+    tensor::{Float, Tensor3},
 };
 use rand::{rng, seq::IteratorRandom};
 
@@ -108,7 +108,7 @@ fn gla_associative_recall() {
     let mut optim = AdamW::default().with(&mut attn);
     optim.learning_rate = 1e-3;
 
-    let mut final_loss = f64::MAX;
+    let mut final_loss = f64::MAX as Float;
 
     let (x, y) = make_associative_recall_dataset(batch_size, d_in);
 

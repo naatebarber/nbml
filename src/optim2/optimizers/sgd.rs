@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::optim2::{Optimizer, ToParams};
+use crate::{optim2::{Optimizer, ToParams}, tensor::Float};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SGD {
-    pub learning_rate: f64,
+    pub learning_rate: Float,
 }
 
 impl Default for SGD {

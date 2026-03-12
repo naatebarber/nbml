@@ -209,7 +209,7 @@ pub fn gaussian_log_prob(x: &Tensor, u: &Tensor, o: &Tensor) -> Tensor {
     let eps = 1e-8;
     let quadratic = (x - u).powi(2) / o.powi(2);
     let norm = o.mapv(|v| v.max(eps).ln()) * 2.;
-    let constant = (core::f64::consts::PI * 2.).ln();
+    let constant = (core::f64::consts::PI as Float * 2.).ln();
     let dims = (quadratic + norm + constant) * -0.5;
     dims.sum_axis(1)
 }
