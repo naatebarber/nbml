@@ -1,14 +1,15 @@
 use std::time::Instant;
 
 use nbml::{
-    Tensor, f::Activation, nn::GatedLinearAttention as GLAV1, nn::LSTM as LSTMV1,
+    Tensor, f::Activation, f::InitializationFn as InitV1, f2::InitializationFn as InitV2,
+    nn::Conv2D as Conv2DV1, nn::GatedLinearAttention as GLAV1, nn::LSTM as LSTMV1,
     nn::Transformer as TransformerV1, nn2::GatedLinearAttention as GLAV2, nn2::LSTM as LSTMV2,
-    nn2::Transformer as TransformerV2, optim::adam::AdamW as AdamWV1,
-    optim::optimizer::Optimizer as OptimizerV1, optim::param::ToParams as ToParamsV1,
-    optim2::Optimizer as OptimizerV2, optim2::ToParams as ToParamsV2,
-    optim2::adam::AdamW as AdamWV2,
+    nn2::Transformer as TransformerV2, nn2::conv2d::Conv2D as Conv2DV2,
+    optim::adam::AdamW as AdamWV1, optim::optimizer::Optimizer as OptimizerV1,
+    optim::param::ToParams as ToParamsV1, optim2::Optimizer as OptimizerV2,
+    optim2::ToParams as ToParamsV2, optim2::adam::AdamW as AdamWV2,
 };
-use ndarray::{Array2, Array3};
+use ndarray::{Array2, Array3, Array4};
 
 fn print_result(name: &str, t1: f64, t2: f64, epochs: usize) {
     println!("{name}");
@@ -184,6 +185,66 @@ fn gla_v2(
     start.elapsed().as_secs_f64()
 }
 
+// --- Conv2D ---
+
+fn conv2d_v1(
+    c_in: usize,
+    c_out: usize,
+    k: usize,
+    batch: usize,
+    h: usize,
+    w: usize,
+    epochs: usize,
+) -> f64 {
+    let mut model = Conv2DV1::new(c_in, c_out, k, k, nbml::f::he);
+    let mut optim = AdamWV1::default().with(&mut model);
+    optim.learning_rate = 1e-3;
+
+    let out_h = h - k + 1;
+    let out_w = w - k + 1;
+    let x = Array4::ones((batch, c_in, h, w));
+    let y: Array4<f64> = Array4::ones((batch, c_out, out_h, out_w)) * 0.5;
+
+    let start = Instant::now();
+    for _ in 0..epochs {
+        let y_pred = model.forward(x.clone(), true);
+        let d_loss = 2. * (&y_pred - &y);
+        model.backward(d_loss);
+        optim.step(&mut model);
+        model.zero_grads();
+    }
+    start.elapsed().as_secs_f64()
+}
+
+fn conv2d_v2(
+    c_in: usize,
+    c_out: usize,
+    k: usize,
+    batch: usize,
+    h: usize,
+    w: usize,
+    epochs: usize,
+) -> f64 {
+    let mut model = Conv2DV2::new(c_in, c_out, k, k, nbml::f2::he);
+    let mut optim = AdamWV2::default().with(&mut model);
+    optim.learning_rate = 1e-3;
+
+    let out_h = h - k + 1;
+    let out_w = w - k + 1;
+    let x = Tensor::ones((batch, c_in, h, w));
+    let y = Tensor::from_elem((batch, c_out, out_h, out_w), 0.5);
+
+    let start = Instant::now();
+    for _ in 0..epochs {
+        let y_pred = model.forward(x.clone(), true);
+        let d_loss = (&y_pred - &y) * 2.0;
+        model.backward(d_loss);
+        optim.step(&mut model);
+        model.zero_grads();
+    }
+    start.elapsed().as_secs_f64()
+}
+
 fn main() {
     let batch = 16;
     let seq = 16;
@@ -232,5 +293,22 @@ fn main() {
         let t1 = gla_v1(d_in, d_head, n_head, batch, seq, epochs);
         let t2 = gla_v2(d_in, d_head, n_head, batch, seq, epochs);
         print_result("Gated Linear Attention", t1, t2, epochs);
+    }
+
+    // Conv2D (im2col)
+    {
+        let c_in = 3;
+        let c_out = 16;
+        let k = 3;
+        let h = 32;
+        let w = 32;
+        println!("Config: c_in={c_in} c_out={c_out} kernel={k}x{k} input={h}x{w}");
+
+        conv2d_v1(c_in, c_out, k, batch, h, w, 5);
+        conv2d_v2(c_in, c_out, k, batch, h, w, 5);
+
+        let t1 = conv2d_v1(c_in, c_out, k, batch, h, w, epochs);
+        let t2 = conv2d_v2(c_in, c_out, k, batch, h, w, epochs);
+        print_result("Conv2D (im2col)", t1, t2, epochs);
     }
 }

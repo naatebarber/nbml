@@ -454,7 +454,7 @@ impl Tensor {
         let ndarray_slice = Tensor::slice_axis_to_ndarray(slice);
         let mut buf = self.data.slice_mut(ndarray_slice.as_slice());
 
-        buf += &accumulate.data;
+        buf += &accumulate.data.view();
     }
 
     pub fn concatenate(axis: usize, tensors: &[&Tensor]) -> Tensor {
@@ -769,17 +769,49 @@ impl_op!(Sub, sub, -);
 impl_op!(Mul, mul, *);
 impl_op!(Div, div, /);
 
+macro_rules! fixed_rank_assign_op {
+    ($self:expr, $rhs:expr, $IxA:ty, $IxB:ty, $op:tt) => {{
+        let a = $self.data.view().into_dimensionality::<$IxA>().unwrap();
+        let b = $rhs.data.view().into_dimensionality::<$IxB>().unwrap();
+        let c = &a + &b;
+        $self.data = c.into_dyn().into();
+    }};
+}
+
+macro_rules! n_fixed_rank_assign_op {
+    ($self:expr, $rhs:expr, $op:tt) => {{
+        match ($self.rank(), $rhs.rank()) {
+            (1, 1) => fixed_rank_assign_op!($self, $rhs, Ix1, Ix1, $op),
+            (1, 2) => fixed_rank_assign_op!($self, $rhs, Ix1, Ix2, $op),
+            (2, 1) => fixed_rank_assign_op!($self, $rhs, Ix2, Ix1, $op),
+            (2, 2) => fixed_rank_assign_op!($self, $rhs, Ix2, Ix2, $op),
+            (2, 3) => fixed_rank_assign_op!($self, $rhs, Ix2, Ix3, $op),
+            (3, 2) => fixed_rank_assign_op!($self, $rhs, Ix3, Ix2, $op),
+            (3, 3) => fixed_rank_assign_op!($self, $rhs, Ix3, Ix3, $op),
+            (3, 4) => fixed_rank_assign_op!($self, $rhs, Ix3, Ix4, $op),
+            (4, 3) => fixed_rank_assign_op!($self, $rhs, Ix4, Ix3, $op),
+            (4, 4) => fixed_rank_assign_op!($self, $rhs, Ix4, Ix4, $op),
+            (4, 5) => fixed_rank_assign_op!($self, $rhs, Ix4, Ix5, $op),
+            (5, 4) => fixed_rank_assign_op!($self, $rhs, Ix5, Ix4, $op),
+            (5, 5) => fixed_rank_assign_op!($self, $rhs, Ix5, Ix5, $op),
+            _ => {
+                $self.data $op &$rhs.data
+            }
+        }
+    }}
+}
+
 macro_rules! impl_assign_op {
     ($trait:ident, $method:ident, $op:tt) => {
         impl $trait<Tensor> for Tensor {
             fn $method(&mut self, rhs: Tensor) {
-                self.data $op &rhs.data
+                n_fixed_rank_assign_op!(self, rhs, $op)
             }
         }
 
         impl $trait<&Tensor> for Tensor {
             fn $method(&mut self, rhs: &Tensor) {
-                self.data $op &rhs.data
+                n_fixed_rank_assign_op!(self, rhs, $op)
             }
         }
     };
