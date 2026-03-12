@@ -34,11 +34,11 @@ impl LayerNorm {
         let x = x.reshape((batch_size * seq_len, features));
 
         let m = (1. / features as Float) * x.sum_axis(1).insert_axis(1);
-        let u = &x - &m;
-        let v = (1. / features as Float) * &(u.clone().powi(2).sum_axis(1).insert_axis(1));
+        let u = x - m;
+        let v = (1. / features as Float) * u.clone().powi(2).sum_axis(1).insert_axis(1);
 
-        let o = (&v + 1e-5).sqrt();
-        let x_h = &u / &o;
+        let o = (v + 1e-5).sqrt();
+        let x_h = u / &o;
         let y_2 = (&x_h * &self.gamma) + &self.beta;
 
         if grad {
@@ -59,11 +59,11 @@ impl LayerNorm {
         self.grads.accumulate("d_gamma", d_gamma);
         self.grads.accumulate("d_beta", d_beta);
 
-        let dx_hat = &d_loss * &self.gamma;
+        let dx_hat = d_loss * &self.gamma;
         let dx = (1. / (features as Float * &self.cache["o"]))
             * (features as Float * &dx_hat
-                - &dx_hat.sum_axis(1).insert_axis(1)
-                - &self.cache["x_h"] * (&dx_hat * &self.cache["x_h"]).sum_axis(1).insert_axis(1));
+                - dx_hat.sum_axis(1).insert_axis(1)
+                - &self.cache["x_h"] * (dx_hat * &self.cache["x_h"]).sum_axis(1).insert_axis(1));
 
         dx.reshape((batch_size, seq_len, features))
     }

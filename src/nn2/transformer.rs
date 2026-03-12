@@ -50,7 +50,7 @@ impl FeedForward {
 
     pub fn backward(&mut self, d_loss: Tensor2) -> Tensor2 {
         let d_loss = self.layer_2.backward(&d_loss);
-        let d_z = &d_loss * d_relu(&self.cache["z"]);
+        let d_z = d_loss * d_relu(&self.cache["z"]);
         self.layer_1.backward(&d_z)
     }
 }

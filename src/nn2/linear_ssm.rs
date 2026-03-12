@@ -75,7 +75,7 @@ impl LinearSSM {
                 self.cache["states"].slice_assign(s![t, .., ..], &state);
             }
 
-            state = &r + &x_b;
+            state = r + x_b;
             let y = state.dot(&self.c);
             output.slice_assign(s![.., t, ..], &y);
         }

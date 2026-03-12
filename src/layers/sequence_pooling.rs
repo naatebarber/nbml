@@ -27,7 +27,7 @@ impl SequencePooling {
             self.cache.set("seq_lens", seq_lens.clone());
         }
 
-        let x_sums = (&x * &mask.insert_axis(2)).sum_axis(1);
+        let x_sums = (x * mask.insert_axis(2)).sum_axis(1);
 
         &x_sums / &seq_lens
     }
@@ -36,13 +36,13 @@ impl SequencePooling {
         let (batch_size, features) = d_loss.dim2();
         let (.., seq_len) = self.cache["mask"].dim2();
 
-        let d_loss_mean = &d_loss / &self.cache["seq_lens"];
+        let d_loss_mean = d_loss / &self.cache["seq_lens"];
 
         let d_loss_3d = d_loss_mean
             .insert_axis(1)
             .broadcast((batch_size, seq_len, features));
 
-        let d_loss_masked = &d_loss_3d * self.cache["mask"].clone().insert_axis(2);
+        let d_loss_masked = d_loss_3d * self.cache["mask"].clone().insert_axis(2);
 
         d_loss_masked
     }

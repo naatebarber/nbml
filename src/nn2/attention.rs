@@ -66,7 +66,7 @@ impl Attention {
             let v_i = v.slice(s![i, .., ..]);
 
             let scores = q_i.dot(&k_i.t());
-            let scores = (scores / (features_k as Float).sqrt()) + &mask.slice(s![i, .., ..]);
+            let scores = (scores / (features_k as Float).sqrt()) + mask.slice(s![i, .., ..]);
             let weights = f::softmax(&scores);
 
             let out = weights.dot(&v_i);

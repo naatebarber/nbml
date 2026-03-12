@@ -60,7 +60,7 @@ impl RNN {
             let x_i = x_t.dot(&self.w_i);
             let r = state.dot(&self.w_r);
 
-            let preactivations = &x_i + &r + &self.b;
+            let preactivations = x_i + r + &self.b;
             let activations = f::tanh(&preactivations);
 
             if grad {
