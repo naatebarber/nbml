@@ -3,10 +3,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::param::{Param, ToParams},
+    optim::{Param, ToParams},
 };
 
 pub type LayerDef = (usize, usize, f::Activation);
+
+#[derive(Default, Debug, Clone)]
+pub struct LayerCache {
+    pub x: Array2<f64>,
+    pub z: Array2<f64>,
+}
+
+impl LayerCache {
+    pub fn clear(&mut self) {
+        *self = LayerCache::default()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct LayerGrads {
+    pub d_w: Array2<f64>,
+    pub d_b: Array1<f64>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Layer {
@@ -15,11 +33,10 @@ pub struct Layer {
 
     pub activation: f::Activation,
 
-    pub x: Array2<f64>,
-    pub z: Array2<f64>,
-
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    #[serde(skip)]
+    pub cache: LayerCache,
+    #[serde(skip)]
+    pub grads: LayerGrads,
 }
 
 impl Layer {
@@ -29,11 +46,8 @@ impl Layer {
             b: Array1::zeros(d_out),
             activation,
 
-            x: Array2::zeros((0, 0)),
-            z: Array2::zeros((0, 0)),
-
-            d_w: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: LayerCache::default(),
+            grads: LayerGrads::default(),
         }
     }
 
@@ -41,28 +55,28 @@ impl Layer {
         let z = x.dot(&self.w) + &self.b;
 
         if grad {
-            self.x = x.clone();
-            self.z = z.clone();
+            self.cache.x = x.clone();
+            self.cache.z = z.clone();
         }
 
         (self.activation.wake().0)(&z)
     }
 
     pub fn backward(&mut self, d_a: Array2<f64>) -> Array2<f64> {
-        let d_z = d_a * &(self.activation.wake().1)(&self.z);
-        let d_w = self.x.t().dot(&d_z);
+        let d_z = d_a * &(self.activation.wake().1)(&self.cache.z);
+        let d_w = self.cache.x.t().dot(&d_z);
         let d_b = d_z.sum_axis(Axis(0));
 
-        self.d_w = if self.d_w.dim() == (0, 0) {
+        self.grads.d_w = if self.grads.d_w.dim() == (0, 0) {
             d_w
         } else {
-            &self.d_w + &d_w
+            &self.grads.d_w + &d_w
         };
 
-        self.d_b = if self.d_b.dim() == 0 {
+        self.grads.d_b = if self.grads.d_b.dim() == 0 {
             d_b
         } else {
-            &self.d_b + &d_b
+            &self.grads.d_b + &d_b
         };
 
         d_z.dot(&self.w.t())
@@ -70,10 +84,10 @@ impl Layer {
 }
 
 impl ToParams for Layer {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::matrix(&mut self.w).with_matrix_grad(&mut self.grads.d_w),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
         ]
     }
 }
@@ -111,7 +125,7 @@ impl FFN {
 }
 
 impl ToParams for FFN {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         let mut params = vec![];
         self.layers
             .iter_mut()

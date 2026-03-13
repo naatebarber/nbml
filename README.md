@@ -7,23 +7,23 @@ Unlike high-level frameworks, `nbml` provides bare primitives and a lightweight 
 ## Features
 
 - **Core primitives**: Attention, LSTM, RNN, Conv2D, Feedforward layers, etc
-- **Activation functions**: ReLU, Sigmoid, Tanh, Softmax, etc
+- **Activation functions**: ReLU, Sigmoid, Tanh, etc
+- **Layers**: Softmax, LayerNorm, Sequence Pooling
 - **Optimizers**: AdamW, SGD
 - **Utilities**: Variable Sequence Batching, Gradient Clipping, Gumbel Softmax, Plots, etc
 - **Minimal abstractions**: Direct ndarray integration for custom algorithms
 
 ## Quick Start
 ```rust
-use nbml::layers::ffn::FFN;
+use nbml::nn::FFN;
 use nbml::f::Activation;
-use nbml::optim::adam::AdamW;
-use nbml::optim::param::ToParams;
+use nbml::optim::{AdamW, Optimizer, ToParams};
 
 // Build a simple feedforward network
-let mut model = FFN::new(vec![(
+let mut model = FFN::new(vec![
     (784, 12, Activation::Relu),
-    (12, 1, Activation::Sigmoid)
-)]);
+    (12, 1, Activation::Sigmoid),
+]);
 
 // Create optimizer
 let mut optimizer = AdamW::default().with(&mut model);
@@ -33,8 +33,8 @@ for batch in training_data {
     let output = model.forward(batch.x, true);
     let loss = cross_entropy(&output, &batch.y);
     let grad = model.backward(loss);
-    optimizer.step();
-    model.zero_grad();
+    optimizer.step(&mut model);
+    model.zero_grads();
 }
 ```
 
@@ -47,10 +47,9 @@ for batch in training_data {
 - **`LSTM`**: Long Short-Term Memory Network
 - **`RNN`**: Vanilla recurrent neural network
 - **`ESN`**: Echo-state network, fixed recurrence + readout
-- **`SNN`**: Spiking neural network
 - **`LSM`**: Liquid state machine
-- **`LayerNorm`**: Layer normalization
-- **`Pooling`**: Sequence mean-pooling
+- **`RNNReservoir`**: RNN reservoir (used by ESN)
+- **`SNNReservoir`**: Spiking neural network reservoir (used by LSM)
 - **`Conv2D`**: Explicit Im2Col Conv2D layer (CPU efficient, memory hungry)
 - **`PatchwiseConv2D`**: Patchwise Conv2D layer (CPU hungry, memory efficient)
 - **`LinearSSM`**: Discrete Linear SSM
@@ -59,9 +58,14 @@ for batch in training_data {
 - **`CrossAttention`**: Multi-head cross attention
 - **`Transformer`**: Transformer encoder/decoder block
 - **`GatedLinearAttention`**: Multi-head gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
-- **`AttentionHead`**: Multi-head self-attention mechanism (dep, use `SelfAttention`)
-- **`TransformerEncoder`**: Pre-norm transformer encoder (dep, use `Transformer::new_encoder()`)
-- **`TransformerDecoder`**: Pre-norm transformer decoder (dep, use `Transformer::new_decoder()`)
+
+### Layers (`nbml::layers`)
+
+Layers that are only useful as components of other modules:
+
+- **`Softmax`**: Row-wise softmax with full Jacobian backward
+- **`LayerNorm`**: Layer normalization
+- **`SequencePooling`**: Sequence mean-pooling
 
 ### Optimizers (`nbml::optim`)
 
@@ -130,7 +134,6 @@ use nbml::f;
 
 let x = Array1::from_vec(vec![-1.0, 0.0, 1.0]);
 let activated = f::relu(&x);
-let softmax = f::softmax(&x);
 ```
 
 Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
@@ -155,12 +158,12 @@ Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
 ### Custom LSTM Training
 ```rust
 use nbml::nn::LSTM;
-use nbml::optim::adam::Adam;
+use nbml::optim::{AdamW, Optimizer, ToParams};
 
 let mut lstm = LSTM::new(
     128     // d_model or feature dimension
 );
-let mut optimizer = Adam::default().with(&mut lstm);
+let mut optimizer = AdamW::default().with(&mut lstm);
 
 // where batch.dim() is (batch_size, seq_len, features)
 // and features == lstm.d_model == (128 in this case)
@@ -169,7 +172,7 @@ for batch in data {
     let output = lstm.forward(batch, true);
     let loss = compute_loss(&output, &target);
     let grad = lstm.backward(loss);
-    optimizer.step();
+    optimizer.step(&mut lstm);
     lstm.zero_grads();
 }
 ```
@@ -200,17 +203,12 @@ let output = attention.forward(
 ### Transformer Decoder
 ```rust
 use nbml::nn::Transformer;
-use nbml::f::Activation;
 use nbml::ndarray::Array3;
 
 let mut transformer = Transformer::new_decoder(
     512,  // d_in
     64,   // d_head
     8,    // n_head
-    vec![ // feedforward network layer definition
-        (512, 512 * 4, Activation::Relu),
-        (512 * 4, 512, Activation::Identity)
-    ]
 );
 
 let y_pred = transformer.forward(

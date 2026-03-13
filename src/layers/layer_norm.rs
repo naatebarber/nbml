@@ -1,7 +1,7 @@
 use ndarray::{Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 
-use crate::optim::param::{Param, ToParams};
+use crate::optim::{Param, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LayerNorm {
@@ -87,7 +87,7 @@ impl LayerNorm {
 }
 
 impl ToParams for LayerNorm {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
             Param::vector(&mut self.gamma).with_vector_grad(&mut self.d_gamma),
             Param::vector(&mut self.beta).with_vector_grad(&mut self.d_beta),

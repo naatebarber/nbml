@@ -3,26 +3,43 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::param::{Param, ToParams},
+    optim::{Param, ToParams},
 };
+
+#[derive(Default, Debug, Clone)]
+pub struct LSTMCache {
+    pub x: Array3<f64>,
+    pub states: Array3<f64>,
+    pub preactivations: Array3<f64>,
+    pub gates: Array3<f64>,
+    pub cells: Array3<f64>,
+}
+
+impl LSTMCache {
+    pub fn clear(&mut self) {
+        *self = LSTMCache::default()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct LSTMGrads {
+    pub d_wi: Array2<f64>,
+    pub d_wr: Array2<f64>,
+    pub d_b: Array1<f64>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LSTM {
-    d_model: usize,
+    pub d_model: usize,
 
-    w_i: Array2<f64>,
-    w_r: Array2<f64>,
-    b: Array1<f64>,
+    pub w_i: Array2<f64>,
+    pub w_r: Array2<f64>,
+    pub b: Array1<f64>,
 
-    x: Array3<f64>,
-    states: Array3<f64>,
-    preactivations: Array3<f64>,
-    gates: Array3<f64>,
-    cells: Array3<f64>,
-
-    d_wi: Array2<f64>,
-    d_wr: Array2<f64>,
-    d_b: Array1<f64>,
+    #[serde(skip)]
+    pub cache: LSTMCache,
+    #[serde(skip)]
+    pub grads: LSTMGrads,
 }
 
 impl LSTM {
@@ -38,15 +55,8 @@ impl LSTM {
                 Array1::zeros(d_model * 3).view()
             ],
 
-            x: Array3::zeros((0, 0, 0)),
-            states: Array3::zeros((0, 0, 0)),
-            preactivations: Array3::zeros((0, 0, 0)),
-            gates: Array3::zeros((0, 0, 0)),
-            cells: Array3::zeros((0, 0, 0)),
-
-            d_wi: Array2::zeros((0, 0)),
-            d_wr: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: LSTMCache::default(),
+            grads: LSTMGrads::default(),
         }
     }
 
@@ -59,35 +69,13 @@ impl LSTM {
         let mut cell = Array2::zeros((batch_size, features));
         let mut output = Array3::zeros(x.dim());
 
-        self.x = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.preactivations = if grad {
-            Array3::zeros((seq_len, batch_size, 4 * features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.gates = if grad {
-            Array3::zeros((seq_len, batch_size, 4 * features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.cells = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
+        if grad {
+            self.cache.x = Array3::zeros((seq_len, batch_size, features));
+            self.cache.states = Array3::zeros((seq_len, batch_size, features));
+            self.cache.preactivations = Array3::zeros((seq_len, batch_size, 4 * features));
+            self.cache.gates = Array3::zeros((seq_len, batch_size, 4 * features));
+            self.cache.cells = Array3::zeros((seq_len, batch_size, features));
+        }
 
         for t in 0..seq_len {
             let x_t = x.slice(s![.., t, ..]);
@@ -111,9 +99,10 @@ impl LSTM {
                 f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
 
             if grad {
-                self.x.slice_mut(s![t, .., ..]).assign(&x_t);
-                self.states.slice_mut(s![t, .., ..]).assign(&state);
-                self.preactivations
+                self.cache.x.slice_mut(s![t, .., ..]).assign(&x_t);
+                self.cache.states.slice_mut(s![t, .., ..]).assign(&state);
+                self.cache
+                    .preactivations
                     .slice_mut(s![t, .., ..])
                     .assign(&preactivatons);
                 let gates = concatenate![
@@ -123,8 +112,8 @@ impl LSTM {
                     cell_gate.view(),
                     output_gate.view()
                 ];
-                self.gates.slice_mut(s![t, .., ..]).assign(&gates);
-                self.cells.slice_mut(s![t, .., ..]).assign(&cell);
+                self.cache.gates.slice_mut(s![t, .., ..]).assign(&gates);
+                self.cache.cells.slice_mut(s![t, .., ..]).assign(&cell);
             }
 
             cell = &cell * &forget_gate + (&input_gate * &cell_gate);
@@ -139,16 +128,16 @@ impl LSTM {
     pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
-        if self.d_wi.dim() == (0, 0) {
-            self.d_wi = Array2::zeros(self.w_i.dim());
+        if self.grads.d_wi.dim() == (0, 0) {
+            self.grads.d_wi = Array2::zeros(self.w_i.dim());
         }
 
-        if self.d_wr.dim() == (0, 0) {
-            self.d_wr = Array2::zeros(self.w_r.dim());
+        if self.grads.d_wr.dim() == (0, 0) {
+            self.grads.d_wr = Array2::zeros(self.w_r.dim());
         }
 
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.b.dim());
+        if self.grads.d_b.dim() == 0 {
+            self.grads.d_b = Array1::zeros(self.b.dim());
         }
 
         let mut d_x = Array3::zeros(d_loss.dim());
@@ -158,9 +147,9 @@ impl LSTM {
         for t in (0..seq_len).rev() {
             let d_loss_t = &d_loss.slice(s![.., t, ..]) + &resid;
 
-            let x = self.x.slice(s![t, .., ..]);
-            let state = self.states.slice(s![t, .., ..]);
-            let preactivations = self.preactivations.slice(s![t, .., ..]);
+            let x = self.cache.x.slice(s![t, .., ..]);
+            let state = self.cache.states.slice(s![t, .., ..]);
+            let preactivations = self.cache.preactivations.slice(s![t, .., ..]);
             let preactivations_forget = preactivations.slice(s![.., 0..self.d_model]);
             let preactivations_input =
                 preactivations.slice(s![.., self.d_model..(2 * self.d_model)]);
@@ -168,13 +157,13 @@ impl LSTM {
                 preactivations.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
             let preactivations_output = preactivations.slice(s![.., (3 * self.d_model)..]);
 
-            let gates = self.gates.slice(s![t, .., ..]);
+            let gates = self.cache.gates.slice(s![t, .., ..]);
             let forget_gate = gates.slice(s![.., 0..self.d_model]);
             let input_gate = gates.slice(s![.., self.d_model..(2 * self.d_model)]);
             let cell_gate = gates.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
             let output_gate = gates.slice(s![.., (3 * self.d_model)..]);
 
-            let cell = self.cells.slice(s![t, .., ..]);
+            let cell = self.cache.cells.slice(s![t, .., ..]);
 
             // recompute cell next, used in creating output state
             let cell_next = &cell * &forget_gate + (&input_gate * &cell_gate);
@@ -209,9 +198,9 @@ impl LSTM {
             ];
 
             // calculate gradients for w_i, w_r, b
-            self.d_wi += &x.t().dot(&d_gates_dz);
-            self.d_wr += &state.t().dot(&d_gates_dz);
-            self.d_b += &d_gates_dz.sum_axis(Axis(0));
+            self.grads.d_wi += &x.t().dot(&d_gates_dz);
+            self.grads.d_wr += &state.t().dot(&d_gates_dz);
+            self.grads.d_b += &d_gates_dz.sum_axis(Axis(0));
 
             let d_x_t = &d_gates_dz.dot(&self.w_i.t());
             d_x.slice_mut(s![.., t, ..]).assign(&d_x_t);
@@ -220,52 +209,6 @@ impl LSTM {
         }
 
         d_x
-    }
-
-    pub fn scan(&self, x: &Array3<f64>) -> (Array3<f64>, Array3<f64>) {
-        let (batch_size, seq_len, features) = x.dim();
-
-        assert!(
-            features == self.d_model,
-            "dimension mismatch, d_model={} d_x={:?}",
-            self.d_model,
-            x.dim()
-        );
-
-        let mut state = Array2::zeros((batch_size, features));
-        let mut cell = Array2::zeros((batch_size, features));
-        let mut output = Array3::zeros(x.dim());
-        let mut cell_output = Array3::zeros(x.dim());
-
-        for t in 0..seq_len {
-            let x_t = x.slice(s![.., t, ..]);
-            let x_i = x_t.dot(&self.w_i);
-            let r = state.dot(&self.w_r);
-
-            let preactivatons = &x_i + &r + &self.b;
-
-            let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
-            let input_gate = f::sigmoid(
-                &preactivatons
-                    .slice(s![.., self.d_model..(2 * self.d_model)])
-                    .to_owned(),
-            );
-            let cell_gate = f::tanh(
-                &preactivatons
-                    .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
-                    .to_owned(),
-            );
-            let output_gate =
-                f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
-
-            cell = &cell * &forget_gate + (&input_gate * &cell_gate);
-            state = &output_gate * f::tanh(&cell);
-
-            output.slice_mut(s![.., t, ..]).assign(&state);
-            cell_output.slice_mut(s![.., t, ..]).assign(&cell);
-        }
-
-        (output, cell_output)
     }
 
     pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>, cell: &mut Array2<f64>) {
@@ -312,35 +255,36 @@ impl LSTM {
             cell.dim()
         );
 
-        if self.x.dim() == (0, 0, 0) {
-            self.x = Array3::zeros((0, batch_size, features))
+        if self.cache.x.dim() == (0, 0, 0) {
+            self.cache.x = Array3::zeros((0, batch_size, features))
         }
 
-        if self.states.dim() == (0, 0, 0) {
-            self.states = Array3::zeros((0, batch_size, features))
+        if self.cache.states.dim() == (0, 0, 0) {
+            self.cache.states = Array3::zeros((0, batch_size, features))
         }
 
-        if self.preactivations.dim() == (0, 0, 0) {
-            self.preactivations = Array3::zeros((0, batch_size, 4 * features))
+        if self.cache.preactivations.dim() == (0, 0, 0) {
+            self.cache.preactivations = Array3::zeros((0, batch_size, 4 * features))
         }
 
-        if self.gates.dim() == (0, 0, 0) {
-            self.gates = Array3::zeros((0, batch_size, 4 * features))
+        if self.cache.gates.dim() == (0, 0, 0) {
+            self.cache.gates = Array3::zeros((0, batch_size, 4 * features))
         }
 
-        if self.cells.dim() == (0, 0, 0) {
-            self.cells = Array3::zeros((0, batch_size, features))
+        if self.cache.cells.dim() == (0, 0, 0) {
+            self.cache.cells = Array3::zeros((0, batch_size, features))
         }
 
-        self.x.push(Axis(0), x.view()).unwrap();
-        self.states.push(Axis(0), h.view()).unwrap();
-        self.cells.push(Axis(0), cell.view()).unwrap();
+        self.cache.x.push(Axis(0), x.view()).unwrap();
+        self.cache.states.push(Axis(0), h.view()).unwrap();
+        self.cache.cells.push(Axis(0), cell.view()).unwrap();
 
         let x_i = x.dot(&self.w_i);
         let r = h.dot(&self.w_r);
         let preactivatons = &x_i + &r + &self.b;
 
-        self.preactivations
+        self.cache
+            .preactivations
             .push(Axis(0), preactivatons.view())
             .unwrap();
 
@@ -364,7 +308,7 @@ impl LSTM {
             cell_gate.view(),
             output_gate.view()
         ];
-        self.gates.push(Axis(0), gates.view()).unwrap();
+        self.cache.gates.push(Axis(0), gates.view()).unwrap();
 
         *cell = &(*cell) * &forget_gate + (&input_gate * &cell_gate);
         *h = &output_gate * f::tanh(&cell);
@@ -372,11 +316,11 @@ impl LSTM {
 }
 
 impl ToParams for LSTM {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.d_wi),
-            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.d_wr),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.grads.d_wi),
+            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.grads.d_wr),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
         ]
     }
 }

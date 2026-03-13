@@ -3,8 +3,28 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::param::{Param, ToParams},
+    optim::{Param, ToParams},
 };
+
+#[derive(Default, Debug, Clone)]
+pub struct RNNCache {
+    pub x: Array3<f64>,
+    pub preactivations: Array3<f64>,
+    pub states: Array3<f64>,
+}
+
+impl RNNCache {
+    pub fn clear(&mut self) {
+        *self = RNNCache::default()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct RNNGrads {
+    pub d_wi: Array2<f64>,
+    pub d_wr: Array2<f64>,
+    pub d_b: Array1<f64>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RNN {
@@ -14,13 +34,10 @@ pub struct RNN {
     w_r: Array2<f64>,
     b: Array1<f64>,
 
-    x: Array3<f64>,
-    preactivations: Array3<f64>,
-    states: Array3<f64>,
-
-    d_wi: Array2<f64>,
-    d_wr: Array2<f64>,
-    d_b: Array1<f64>,
+    #[serde(skip)]
+    cache: RNNCache,
+    #[serde(skip)]
+    grads: RNNGrads,
 }
 
 impl RNN {
@@ -32,13 +49,8 @@ impl RNN {
             w_r: f::xavier((d_model, d_model)),
             b: Array1::zeros(d_model),
 
-            x: Array3::zeros((0, 0, 0)),
-            states: Array3::zeros((0, 0, 0)),
-            preactivations: Array3::zeros((0, 0, 0)),
-
-            d_wi: Array2::zeros((0, 0)),
-            d_wr: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: RNNCache::default(),
+            grads: RNNGrads::default(),
         }
     }
 
@@ -50,23 +62,11 @@ impl RNN {
         let mut state = Array2::zeros((batch_size, features));
         let mut output = Array3::zeros(x.dim());
 
-        self.x = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.preactivations = if grad {
-            Array3::zeros((seq_len, batch_size, features))
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
+        if grad {
+            self.cache.x = Array3::zeros((seq_len, batch_size, features));
+            self.cache.states = Array3::zeros((seq_len, batch_size, features));
+            self.cache.preactivations = Array3::zeros((seq_len, batch_size, features));
+        }
 
         for t in 0..seq_len {
             let x_t = x.slice(s![.., t, ..]);
@@ -77,9 +77,10 @@ impl RNN {
             let activations = f::tanh(&preactivations);
 
             if grad {
-                self.x.slice_mut(s![t, .., ..]).assign(&x_t);
-                self.states.slice_mut(s![t, .., ..]).assign(&state);
-                self.preactivations
+                self.cache.x.slice_mut(s![t, .., ..]).assign(&x_t);
+                self.cache.states.slice_mut(s![t, .., ..]).assign(&state);
+                self.cache
+                    .preactivations
                     .slice_mut(s![t, .., ..])
                     .assign(&preactivations);
             }
@@ -94,16 +95,16 @@ impl RNN {
     pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
-        if self.d_wi.dim() == (0, 0) {
-            self.d_wi = Array2::zeros(self.w_i.dim());
+        if self.grads.d_wi.dim() == (0, 0) {
+            self.grads.d_wi = Array2::zeros(self.w_i.dim());
         }
 
-        if self.d_wr.dim() == (0, 0) {
-            self.d_wr = Array2::zeros(self.w_r.dim());
+        if self.grads.d_wr.dim() == (0, 0) {
+            self.grads.d_wr = Array2::zeros(self.w_r.dim());
         }
 
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.d_model);
+        if self.grads.d_b.dim() == 0 {
+            self.grads.d_b = Array1::zeros(self.d_model);
         }
 
         let mut d_x = Array3::zeros(d_loss.dim());
@@ -112,14 +113,14 @@ impl RNN {
         for t in (0..seq_len).rev() {
             let d_loss_t = &d_loss.slice(s![.., t, ..]) + &resid;
 
-            let preactivations = self.preactivations.slice(s![t, .., ..]).to_owned();
-            let state = self.states.slice(s![t, .., ..]);
-            let x = self.x.slice(s![t, .., ..]);
+            let preactivations = self.cache.preactivations.slice(s![t, .., ..]).to_owned();
+            let state = self.cache.states.slice(s![t, .., ..]);
+            let x = self.cache.x.slice(s![t, .., ..]);
 
             let d_z = &d_loss_t * f::d_tanh(&preactivations);
-            self.d_wi += &x.t().dot(&d_z);
-            self.d_wr += &state.t().dot(&d_z);
-            self.d_b += &d_z.sum_axis(Axis(0));
+            self.grads.d_wi += &x.t().dot(&d_z);
+            self.grads.d_wr += &state.t().dot(&d_z);
+            self.grads.d_b += &d_z.sum_axis(Axis(0));
 
             let d_x_t = d_z.dot(&self.w_i.t());
             d_x.slice_mut(s![.., t, ..]).assign(&d_x_t);
@@ -132,11 +133,11 @@ impl RNN {
 }
 
 impl ToParams for RNN {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.d_wi),
-            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.d_wr),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.grads.d_wi),
+            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.grads.d_wr),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
         ]
     }
 }

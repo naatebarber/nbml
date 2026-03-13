@@ -1,9 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{
-    optimizer::Optimizer,
-    param::{ParamValue, ToParams},
-};
+use crate::optim::{Optimizer, ParamValue, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SGD {

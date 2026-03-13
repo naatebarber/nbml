@@ -1,7 +1,7 @@
 use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
 
 use crate::{
-    f, nn::LayerNorm, optim::param::{Param, ToParams}
+    f, nn::LayerNorm, optim::{Param, ToParams}
 };
 
 // TODO
@@ -325,7 +325,7 @@ impl GatedLinearAttention {
 }
 
 impl ToParams for GatedLinearAttention {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         let mut params = vec![
             Param::matrix(&mut self.w_qkv).with_matrix_grad(&mut self.d_w_qkv),
             Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.d_b_qkv),

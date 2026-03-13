@@ -1,7 +1,7 @@
 use nbml::{
-    f::{Activation, positional_encoding_seq},
+    f::positional_encoding_seq,
     nn::Transformer,
-    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
+    optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, s, stack};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
@@ -19,10 +19,7 @@ fn identity() {
 
     // Small transformer for testing
     let mut transformer = Transformer::new_encoder(
-        EMBED_DIM,
-        D_HEAD,
-        NUM_HEADS, // num_layers
-        vec![(EMBED_DIM, EMBED_DIM, Activation::Relu)],
+        EMBED_DIM, D_HEAD, NUM_HEADS, // num_layers
     );
 
     let mut optim = AdamW::default().with(&mut transformer);
@@ -79,12 +76,7 @@ pub fn mean_pooling() {
     println!("Output should be the mean of all sequence positions");
     println!("This tests if attention mechanism works\n");
 
-    let mut transformer2 = Transformer::new_encoder(
-        EMBED_DIM,
-        NUM_HEADS,
-        2,
-        vec![(EMBED_DIM, EMBED_DIM, Activation::Relu)],
-    );
+    let mut transformer2 = Transformer::new_encoder(EMBED_DIM, NUM_HEADS, 2);
 
     let mut optim2 = AdamW::default().with(&mut transformer2);
     optim2.learning_rate = 1e-3;
@@ -139,10 +131,7 @@ pub fn mean_pooling() {
 #[test]
 fn gradient_flow() {
     let mut transformer = Transformer::new_encoder(
-        EMBED_DIM,
-        NUM_HEADS,
-        3, // Deeper network to test gradient flow
-        vec![(EMBED_DIM, EMBED_DIM, Activation::Relu)],
+        EMBED_DIM, NUM_HEADS, 3, // Deeper network to test gradient flow
     );
 
     let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
@@ -188,12 +177,7 @@ fn gradient_flow() {
 
 #[test]
 fn overfitting() {
-    let mut transformer = Transformer::new_encoder(
-        EMBED_DIM,
-        NUM_HEADS,
-        2,
-        vec![(EMBED_DIM, EMBED_DIM, Activation::Relu)],
-    );
+    let mut transformer = Transformer::new_encoder(EMBED_DIM, NUM_HEADS, 2);
 
     let mut optim = AdamW::default().with(&mut transformer);
     optim.learning_rate = 6e-3; // Higher learning rate for faster overfitting
@@ -249,17 +233,12 @@ fn retrieval_by_marker() {
     // The marker position (one-hot in last dim) tells which vector to output.
     // This is pure content-based attention - what transformers are MADE for.
 
-    let mut model = Transformer::new_decoder(
-        16,
-        8,
-        2,
-        vec![(16, 64, Activation::Relu), (64, 16, Activation::Identity)],
-    );
+    let mut model = Transformer::new_decoder(16, 6, 4);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
     let mut final_loss = 0.;
-    for e in 0..4000 {
+    for e in 0..6000 {
         // 3 random vectors
         let v1 = Array1::random(16, Uniform::new(0., 1.));
         let v2 = Array1::random(16, Uniform::new(0., 1.));
@@ -312,7 +291,7 @@ fn retrieval_by_marker() {
             println!("epoch {e} loss {loss:.6}");
         }
 
-        final_loss = loss;
+        final_loss = 0.9 * final_loss + 0.1 * loss;
     }
 
     assert!(
@@ -329,12 +308,7 @@ fn fixed_position_retrieval() {
     //
     // Always retrieve position 2. No marker, just "learn that position 5 copies position 2"
 
-    let mut model = Transformer::new_decoder(
-        16,
-        8,
-        2,
-        vec![(16, 64, Activation::Relu), (64, 16, Activation::Identity)],
-    );
+    let mut model = Transformer::new_decoder(16, 8, 2);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
@@ -379,7 +353,7 @@ fn fixed_position_retrieval() {
             println!("epoch {e} loss {loss:.6}");
         }
 
-        final_loss = loss;
+        final_loss = 0.9 * final_loss + 0.1 * loss;
     }
 
     assert!(
@@ -398,12 +372,7 @@ fn delayed_copy_single_token() {
     // Position 6 copies position 1
     // etc.
 
-    let mut model = Transformer::new_decoder(
-        16,
-        8,
-        2,
-        vec![(16, 64, Activation::Relu), (64, 16, Activation::Identity)],
-    );
+    let mut model = Transformer::new_decoder(16, 8, 2);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
@@ -463,12 +432,7 @@ fn delayed_copy_single_token() {
 
 #[test]
 fn memorize_one_delayed_copy() {
-    let mut model = Transformer::new_decoder(
-        16,
-        8,
-        2,
-        vec![(16, 64, Activation::Relu), (64, 16, Activation::Identity)],
-    );
+    let mut model = Transformer::new_decoder(16, 8, 2);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-3;
 

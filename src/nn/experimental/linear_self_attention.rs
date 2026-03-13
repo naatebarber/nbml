@@ -2,7 +2,7 @@ use ndarray::{Array1, Array2, Array3, Array4, Axis, s, stack};
 
 use crate::{
     f,
-    optim::param::{Param, ToParams},
+    optim::{Param, ToParams},
 };
 
 pub struct LinearSelfAttention {
@@ -224,7 +224,7 @@ impl LinearSelfAttention {
 }
 
 impl ToParams for LinearSelfAttention {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
             Param::matrix(&mut self.w_qkv).with_matrix_grad(&mut self.d_w_qkv),
             Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.d_b_qkv),

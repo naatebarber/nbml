@@ -1,4 +1,5 @@
 pub mod f;
+pub mod layers;
 pub mod nn;
 pub mod optim;
 pub mod util;

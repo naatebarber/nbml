@@ -1,11 +1,10 @@
 use ndarray::{Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 
-use crate::nn::SelfAttention;
-use crate::optim::param::ToParams;
-
-use super::ffn::{FFN, LayerDef};
-use super::layernorm::LayerNorm;
+use crate::f::Activation;
+use crate::layers::LayerNorm;
+use crate::nn::{FFN, SelfAttention};
+use crate::optim::{Param, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transformer {
@@ -18,39 +17,26 @@ pub struct Transformer {
 }
 
 impl Transformer {
-    fn new(
-        d_in: usize,
-        d_head: usize,
-        n_head: usize,
-        ff_layers: Vec<LayerDef>,
-        decoder: bool,
-    ) -> Self {
+    fn new(d_in: usize, d_head: usize, n_head: usize, decoder: bool) -> Self {
         Self {
             decoder,
             d_in,
             attn: SelfAttention::new(d_in, d_head, n_head),
             norm_attn: LayerNorm::new(d_in),
-            feed_forward: FFN::new(ff_layers),
+            feed_forward: FFN::new(vec![
+                (d_in, 4 * d_in, Activation::Relu),
+                (4 * d_in, d_in, Activation::Identity),
+            ]),
             norm_feed_forward: LayerNorm::new(d_in),
         }
     }
 
-    pub fn new_encoder(
-        d_in: usize,
-        d_head: usize,
-        n_head: usize,
-        ff_layers: Vec<LayerDef>,
-    ) -> Self {
-        Transformer::new(d_in, d_head, n_head, ff_layers, false)
+    pub fn new_encoder(d_in: usize, d_head: usize, n_head: usize) -> Self {
+        Transformer::new(d_in, d_head, n_head, false)
     }
 
-    pub fn new_decoder(
-        d_in: usize,
-        d_head: usize,
-        n_head: usize,
-        ff_layers: Vec<LayerDef>,
-    ) -> Self {
-        Transformer::new(d_in, d_head, n_head, ff_layers, true)
+    pub fn new_decoder(d_in: usize, d_head: usize, n_head: usize) -> Self {
+        Transformer::new(d_in, d_head, n_head, true)
     }
 
     pub fn pad_mask(&self, pad_mask: Array2<f64>) -> Array3<f64> {
@@ -129,7 +115,7 @@ impl Transformer {
 }
 
 impl ToParams for Transformer {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         let mut params = vec![];
 
         params.append(&mut self.attn.params());

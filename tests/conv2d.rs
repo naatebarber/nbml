@@ -1,7 +1,7 @@
 use nbml::{
     f::he,
     nn::conv2d::{Conv2D, PatchwiseConv2D},
-    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
+    optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::{Array4, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};

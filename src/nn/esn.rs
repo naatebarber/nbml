@@ -1,79 +1,11 @@
-use ndarray::{Array1, Array2, Array3, s};
+use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f::{self, Activation},
-    nn::FFN,
-    optim::param::ToParams,
+    f::Activation,
+    nn::{FFN, RNNReservoir},
+    optim::{Param, ToParams},
 };
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RNNReservoir {
-    pub d_in: usize,
-    pub d_hidden: usize,
-
-    pub w_p: Array2<f64>,
-    pub w_r: Array2<f64>,
-    pub b: Array1<f64>,
-}
-
-impl RNNReservoir {
-    pub fn new(d_in: usize, d_hidden: usize) -> Self {
-        Self {
-            d_in,
-            d_hidden,
-
-            w_p: f::xavier((d_in, d_hidden)),
-            w_r: f::xavier((d_hidden, d_hidden)),
-            b: Array1::zeros(d_hidden),
-        }
-    }
-
-    pub fn set_spectral_radius(&mut self, desired: f64, n: usize) -> f64 {
-        let lambda = f::calculate_spectral_radius(&self.w_r, n);
-        self.w_r *= desired / lambda;
-        f::calculate_spectral_radius(&self.w_r, n)
-    }
-
-    pub fn forward(&self, x: Array3<f64>) -> Array3<f64> {
-        let (batch_size, seq_len, features) = x.dim();
-
-        assert!(features == self.d_in, "feature dimension != d_in");
-
-        let mut state = Array2::zeros((batch_size, self.d_hidden));
-        let mut encoded = Array3::zeros((batch_size, seq_len, self.d_hidden));
-
-        let x_2d = x
-            .into_shape_clone((batch_size * seq_len, features))
-            .unwrap();
-        let x_p_2d = x_2d.dot(&self.w_p);
-        let x_p = x_p_2d
-            .into_shape_clone((batch_size, seq_len, self.d_hidden))
-            .unwrap();
-
-        for t in 0..seq_len {
-            let x_p_t = x_p.slice(s![.., t, ..]);
-            let r = state.dot(&self.w_r);
-
-            let preactivations = &x_p_t + &r + &self.b;
-            let activations = f::tanh(&preactivations);
-
-            state = activations;
-            encoded.slice_mut(s![.., t, ..]).assign(&state);
-        }
-
-        encoded
-    }
-
-    pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>) {
-        let x_p = x.dot(&self.w_p);
-        let r = h.dot(&self.w_r);
-
-        let preactivations = &x_p + &r + &self.b;
-        let activations = f::tanh(&preactivations);
-        *h = activations;
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ESN {
@@ -133,7 +65,7 @@ impl ESN {
 }
 
 impl ToParams for ESN {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         self.readout.params()
     }
 }

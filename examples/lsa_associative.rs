@@ -4,7 +4,7 @@ use nbml::{
     ndarray::{Array2, Array3, Axis, s},
     ndarray_rand::{RandomExt, rand_distr::Uniform},
     nn::experimental::linear_self_attention::LinearSelfAttention,
-    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
+    optim::{AdamW, Optimizer, ToParams},
 };
 use rand::Rng;
 

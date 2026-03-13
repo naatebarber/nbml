@@ -1,7 +1,7 @@
 use nbml::{
     f,
     nn::{Attention, CrossAttention, SelfAttention},
-    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
+    optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};

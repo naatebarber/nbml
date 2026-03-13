@@ -1,6 +1,6 @@
 use nbml::{
     nn::experimental::linear_self_attention::LinearSelfAttention,
-    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
+    optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::{Array1, Array3, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};

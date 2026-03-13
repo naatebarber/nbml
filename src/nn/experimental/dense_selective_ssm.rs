@@ -3,7 +3,7 @@ use ndarray_rand::{RandomExt, rand_distr::Normal};
 
 use crate::{
     f::{self, xavier_normal},
-    optim::param::{Param, ToParams},
+    optim::{Param, ToParams},
 };
 
 // discretization rule means dynamic taus per input in the standard eq A' = A.exp(t) where in
@@ -149,7 +149,7 @@ impl DenseSelectiveSSM {
 }
 
 impl ToParams for DenseSelectiveSSM {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
             Param::matrix(&mut self.t_w).with_matrix_grad(&mut self.d_tw),
             Param::vector(&mut self.t_b).with_vector_grad(&mut self.d_tb),

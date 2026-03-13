@@ -3,8 +3,25 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
-    optim::param::{Param, ToParams},
+    optim::{Param, ToParams},
 };
+
+#[derive(Default, Debug, Clone)]
+pub struct Conv2DCache {
+    pub stack: Array2<f64>,
+}
+
+impl Conv2DCache {
+    pub fn clear(&mut self) {
+        *self = Conv2DCache::default()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct Conv2DGrads {
+    pub d_w: Array2<f64>,
+    pub d_b: Array1<f64>,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Conv2D {
@@ -16,10 +33,10 @@ pub struct Conv2D {
     pub w: Array2<f64>, // (C_in * kH * kW, C_out)
     pub b: Array1<f64>, // (C_out)
 
-    pub stack: Array2<f64>,
-
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    #[serde(skip)]
+    cache: Conv2DCache,
+    #[serde(skip)]
+    grads: Conv2DGrads,
 }
 
 impl Conv2D {
@@ -39,10 +56,8 @@ impl Conv2D {
             w: init((channels_in * k_h * k_w, channels_out)),
             b: Array1::zeros(channels_out),
 
-            stack: Array2::zeros((0, 0)),
-
-            d_w: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: Conv2DCache::default(),
+            grads: Conv2DGrads::default(),
         }
     }
 
@@ -86,7 +101,9 @@ impl Conv2D {
             .unwrap();
         let conv_out = conv_out.permuted_axes([2, 3, 0, 1]);
 
-        self.stack = if grad { stack } else { Array2::zeros((0, 0)) };
+        if grad {
+            self.cache.stack = stack;
+        }
 
         conv_out
     }
@@ -99,16 +116,16 @@ impl Conv2D {
             .into_shape_clone((strides_h * strides_w * batch_size, channels_out))
             .unwrap();
 
-        if self.d_w.dim() == (0, 0) {
-            self.d_w = Array2::zeros(self.w.dim());
+        if self.grads.d_w.dim() == (0, 0) {
+            self.grads.d_w = Array2::zeros(self.w.dim());
         }
 
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.b.dim());
+        if self.grads.d_b.dim() == 0 {
+            self.grads.d_b = Array1::zeros(self.b.dim());
         }
 
-        self.d_w += &self.stack.t().dot(&d_z);
-        self.d_b += &d_z.sum_axis(Axis(0));
+        self.grads.d_w += &self.cache.stack.t().dot(&d_z);
+        self.grads.d_b += &d_z.sum_axis(Axis(0));
 
         let d_stack = d_z.dot(&self.w.t()); // (batch_size * strides_h * strides_w, channels_in * k_h * k_w)
 
@@ -159,12 +176,29 @@ impl Conv2D {
 }
 
 impl ToParams for Conv2D {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::matrix(&mut self.w).with_matrix_grad(&mut self.grads.d_w),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
         ]
     }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct PatchwiseConv2DCache {
+    pub x: Array4<f64>,
+}
+
+impl PatchwiseConv2DCache {
+    pub fn clear(&mut self) {
+        *self = PatchwiseConv2DCache::default()
+    }
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct PatchwiseConv2DGrads {
+    pub d_w: Array2<f64>,
+    pub d_b: Array1<f64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -177,10 +211,10 @@ pub struct PatchwiseConv2D {
     pub w: Array2<f64>,
     pub b: Array1<f64>,
 
-    pub x: Array4<f64>,
-
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    #[serde(skip)]
+    pub cache: PatchwiseConv2DCache,
+    #[serde(skip)]
+    pub grads: PatchwiseConv2DGrads,
 }
 
 impl PatchwiseConv2D {
@@ -200,10 +234,8 @@ impl PatchwiseConv2D {
             w: init((channels_in * k_h * k_w, channels_out)),
             b: Array1::zeros(channels_out),
 
-            x: Array4::zeros((0, 0, 0, 0)),
-
-            d_w: Array2::zeros((0, 0)),
-            d_b: Array1::zeros(0),
+            cache: PatchwiseConv2DCache::default(),
+            grads: PatchwiseConv2DGrads::default(),
         }
     }
 
@@ -236,7 +268,9 @@ impl PatchwiseConv2D {
             }
         }
 
-        self.x = if grad { x } else { Array4::zeros((0, 0, 0, 0)) };
+        if grad {
+            self.cache.x = x;
+        }
 
         output
     }
@@ -244,15 +278,15 @@ impl PatchwiseConv2D {
     pub fn backward(&mut self, d_loss: Array4<f64>) -> Array4<f64> {
         let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim();
 
-        if self.d_w.dim() == (0, 0) {
-            self.d_w = Array2::zeros(self.w.dim());
+        if self.grads.d_w.dim() == (0, 0) {
+            self.grads.d_w = Array2::zeros(self.w.dim());
         }
 
-        if self.d_b.dim() == 0 {
-            self.d_b = Array1::zeros(self.b.dim());
+        if self.grads.d_b.dim() == 0 {
+            self.grads.d_b = Array1::zeros(self.b.dim());
         }
 
-        let mut d_x = Array4::zeros(self.x.dim());
+        let mut d_x = Array4::zeros(self.cache.x.dim());
 
         for i_h in 0..strides_h {
             for i_w in 0..strides_w {
@@ -263,14 +297,15 @@ impl PatchwiseConv2D {
                     .unwrap();
 
                 let patch = self
+                    .cache
                     .x
                     .slice(s![.., .., i_h..(i_h + self.k_h), i_w..(i_w + self.k_w)])
                     .to_owned()
                     .into_shape_clone((batch_size, self.channels_in * self.k_h * self.k_w))
                     .unwrap();
 
-                self.d_w += &(patch.t().dot(&d_patch));
-                self.d_b += &d_patch.sum_axis(Axis(0));
+                self.grads.d_w += &(patch.t().dot(&d_patch));
+                self.grads.d_b += &d_patch.sum_axis(Axis(0));
 
                 let dx_dpatch_2d = d_patch.dot(&self.w.t()); // (B, C * kh * kw)
                 let dx_dpatch = dx_dpatch_2d
@@ -287,10 +322,10 @@ impl PatchwiseConv2D {
 }
 
 impl ToParams for PatchwiseConv2D {
-    fn params(&mut self) -> Vec<crate::optim::param::Param> {
+    fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.d_b),
+            Param::matrix(&mut self.w).with_matrix_grad(&mut self.grads.d_w),
+            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
         ]
     }
 }

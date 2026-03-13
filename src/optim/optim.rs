@@ -1,8 +1,6 @@
-use std::{error::Error, fs, path::PathBuf};
-
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
-use serde_binary::binary_stream::Endian;
+use std::fmt::Debug;
 
 pub enum ParamValue {
     None,
@@ -62,27 +60,6 @@ impl Param {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub enum Weight {
-    None,
-    Scalar(f64),
-    Vector(Array1<f64>),
-    Matrix(Array2<f64>),
-}
-
-impl Weight {
-    pub fn from_param(param: Param) -> Weight {
-        unsafe {
-            match param.target {
-                ParamValue::None => Weight::None,
-                ParamValue::Scalar(target) => Weight::Scalar((*target).clone()),
-                ParamValue::Vector(target) => Weight::Vector((*target).clone()),
-                ParamValue::Matrix(target) => Weight::Matrix((*target).clone()),
-            }
-        }
-    }
-}
-
 pub trait ToParams {
     fn params(&mut self) -> Vec<Param>;
 
@@ -98,39 +75,9 @@ pub trait ToParams {
             }
         }
     }
+}
 
-    fn save_weights(&mut self, path: &PathBuf) -> Result<(), Box<dyn Error>> {
-        let weights = self
-            .params()
-            .into_iter()
-            .map(|p| Weight::from_param(p))
-            .collect::<Vec<Weight>>();
-        let blob = serde_binary::to_vec(&weights, Endian::Big)?;
-        fs::write(path, &blob)?;
-        Ok(())
-    }
-
-    fn from_weights(&mut self, path: &PathBuf) -> Result<(), Box<dyn Error>> {
-        let blob = fs::read(path)?;
-        let weights: Vec<Weight> = serde_binary::from_vec(blob, Endian::Big)?;
-
-        unsafe {
-            for (param, weight) in self.params().into_iter().zip(weights.into_iter()) {
-                match (param.target, weight) {
-                    (ParamValue::Scalar(target), Weight::Scalar(weight)) => {
-                        *target = weight;
-                    }
-                    (ParamValue::Vector(target), Weight::Vector(weight)) => {
-                        *target = weight;
-                    }
-                    (ParamValue::Matrix(target), Weight::Matrix(weight)) => {
-                        *target = weight;
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        Ok(())
-    }
+pub trait Optimizer: Serialize + Deserialize<'static> + Debug + Clone {
+    fn with(self, optimizable: &mut impl ToParams) -> Self;
+    fn step(&mut self, optimizable: &mut impl ToParams);
 }

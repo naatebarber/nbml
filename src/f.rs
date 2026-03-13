@@ -102,8 +102,11 @@ pub fn d_softmax(s: &Array2<f64>, g: &Array2<f64>) -> Array2<f64> {
     s * (g - dot)
 }
 
+/**
+ * The output of this method gets multiplied against the incoming gradient. Since the gradient of
+ * cross entropy loss is y_pred - y, we don't want to mutate it at all, and return 1
+ */
 pub fn d_softmax_cross_entropy(x: &Array2<f64>) -> Array2<f64> {
-    // x.to_owned()
     Array2::ones(x.dim())
 }
 

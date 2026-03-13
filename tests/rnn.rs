@@ -1,6 +1,6 @@
 use nbml::{
     nn::RNN,
-    optim::{adam::AdamW, optimizer::Optimizer, param::ToParams},
+    optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::{Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};

@@ -3,7 +3,7 @@ use ndarray::array;
 use nbml::{
     f,
     nn::ffn::FFN,
-    optim::{adam::AdamW, optimizer::Optimizer},
+    optim::{AdamW, Optimizer},
 };
 
 pub fn main() {
