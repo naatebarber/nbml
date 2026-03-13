@@ -63,7 +63,7 @@ for batch in training_data {
 
 Layers that are only useful as components of other modules:
 
-- **`Softmax`**: Row-wise softmax with full Jacobian backward
+- **`Softmax`**: Row-wise softmax
 - **`LayerNorm`**: Layer normalization
 - **`SequencePooling`**: Sequence mean-pooling
 
