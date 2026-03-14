@@ -1,10 +1,42 @@
 use nbml::{
     f::he,
     nn::conv2d::{Conv2D, PatchwiseConv2D},
-    optim::{AdamW, Optimizer, ToParams},
+    optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
 use ndarray::{Array4, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
+
+#[test]
+fn intermediate_caching() {
+    let mut model = Conv2D::new(3, 6, 3, 3, he);
+    let x = Array4::random((2, 3, 8, 8), Uniform::new(0., 1.));
+    let x2 = Array4::random((2, 3, 8, 8), Uniform::new(0., 1.));
+    let d = Array4::ones((2, 6, 6, 6));
+
+    model.forward(x.clone(), true);
+    let cache_a = model.stash_intermediates();
+    model.backward(d.clone());
+    let grads_a = model.grads.clone();
+    model.zero_grads();
+
+    model.forward(x2.clone(), true);
+    let cache_b = model.stash_intermediates();
+    model.backward(d.clone());
+    let grads_b = model.grads.clone();
+    model.zero_grads();
+
+    model.apply_intermediates(cache_a.clone());
+    model.backward(d.clone());
+    let grads_c = model.grads.clone();
+
+    assert!(x != x2);
+    assert!(cache_a != cache_b);
+    assert!(grads_a.d_w != grads_b.d_w);
+    assert!(
+        grads_a.d_w == grads_c.d_w,
+        "intermediate caching process fucks with gradients"
+    );
+}
 
 #[test]
 fn im2col_conv2d_produces_correct_shapes() {

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 #[derive(Default, Debug, Clone)]
@@ -11,12 +11,6 @@ pub struct RNNCache {
     pub x: Array3<f64>,
     pub preactivations: Array3<f64>,
     pub states: Array3<f64>,
-}
-
-impl RNNCache {
-    pub fn clear(&mut self) {
-        *self = RNNCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -135,9 +129,19 @@ impl RNN {
 impl ToParams for RNN {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_i).with_matrix_grad(&mut self.grads.d_wi),
-            Param::matrix(&mut self.w_r).with_matrix_grad(&mut self.grads.d_wr),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
+            Param::new(&mut self.w_i).with_grad(&mut self.grads.d_wi),
+            Param::new(&mut self.w_r).with_grad(&mut self.grads.d_wr),
+            Param::new(&mut self.b).with_grad(&mut self.grads.d_b),
+        ]
+    }
+}
+
+impl ToIntermediates for RNN {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![
+            &mut self.cache.x,
+            &mut self.cache.preactivations,
+            &mut self.cache.states,
         ]
     }
 }

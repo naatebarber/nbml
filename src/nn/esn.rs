@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     f::Activation,
     nn::{FFN, RNNReservoir},
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -67,5 +67,11 @@ impl ESN {
 impl ToParams for ESN {
     fn params(&mut self) -> Vec<Param> {
         self.readout.params()
+    }
+}
+
+impl ToIntermediates for ESN {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        self.readout.intermediates()
     }
 }

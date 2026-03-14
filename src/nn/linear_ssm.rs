@@ -3,19 +3,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearSSMCache {
     pub x: Array3<f64>,
     pub states: Array3<f64>,
-}
-
-impl LinearSSMCache {
-    pub fn clear(&mut self) {
-        *self = LinearSSMCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -149,9 +143,15 @@ impl LinearSSM {
 impl ToParams for LinearSSM {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.a).with_matrix_grad(&mut self.grads.d_a),
-            Param::matrix(&mut self.b).with_matrix_grad(&mut self.grads.d_b),
-            Param::matrix(&mut self.c).with_matrix_grad(&mut self.grads.d_c),
+            Param::new(&mut self.a).with_grad(&mut self.grads.d_a),
+            Param::new(&mut self.b).with_grad(&mut self.grads.d_b),
+            Param::new(&mut self.c).with_grad(&mut self.grads.d_c),
         ]
+    }
+}
+
+impl ToIntermediates for LinearSSM {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.x, &mut self.cache.states]
     }
 }

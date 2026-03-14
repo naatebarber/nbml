@@ -3,13 +3,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
-// TODO
-// make multiheaded. easy since attention only loops over sequence
-// multihead is just a projection problem, heads added to batch dim
-//
 // TODO
 // cross attention variant
 
@@ -23,12 +19,6 @@ pub struct GLACache {
     pub forget_gates: Array3<f64>,
     pub states: Array4<f64>,
     pub attn_2d: Array2<f64>,
-}
-
-impl GLACache {
-    pub fn clear(&mut self) {
-        *self = GLACache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -320,12 +310,27 @@ impl GatedLinearAttention {
 impl ToParams for GatedLinearAttention {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_qkv).with_matrix_grad(&mut self.grads.d_w_qkv),
-            Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.grads.d_b_qkv),
-            Param::matrix(&mut self.w_forget).with_matrix_grad(&mut self.grads.d_w_forget),
-            Param::vector(&mut self.b_forget).with_vector_grad(&mut self.grads.d_b_forget),
-            Param::matrix(&mut self.w_o).with_matrix_grad(&mut self.grads.d_w_o),
-            Param::vector(&mut self.b_o).with_vector_grad(&mut self.grads.d_b_o),
+            Param::new(&mut self.w_qkv).with_grad(&mut self.grads.d_w_qkv),
+            Param::new(&mut self.b_qkv).with_grad(&mut self.grads.d_b_qkv),
+            Param::new(&mut self.w_forget).with_grad(&mut self.grads.d_w_forget),
+            Param::new(&mut self.b_forget).with_grad(&mut self.grads.d_b_forget),
+            Param::new(&mut self.w_o).with_grad(&mut self.grads.d_w_o),
+            Param::new(&mut self.b_o).with_grad(&mut self.grads.d_b_o),
+        ]
+    }
+}
+
+impl ToIntermediates for GatedLinearAttention {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![
+            &mut self.cache.x_2d,
+            &mut self.cache.q,
+            &mut self.cache.k,
+            &mut self.cache.v,
+            &mut self.cache.forget_2d,
+            &mut self.cache.forget_gates,
+            &mut self.cache.states,
+            &mut self.cache.attn_2d,
         ]
     }
 }

@@ -1,18 +1,12 @@
 use ndarray::{Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 
-use crate::optim::{Param, ToParams};
+use crate::optim::{Param, ToIntermediates, ToParams};
 
 #[derive(Default, Debug, Clone)]
 pub struct LayerNormCache {
     pub o: Array2<f64>,
     pub x_h: Array2<f64>,
-}
-
-impl LayerNormCache {
-    pub fn clear(&mut self) {
-        *self = LayerNormCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -106,8 +100,14 @@ impl LayerNorm {
 impl ToParams for LayerNorm {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::vector(&mut self.gamma).with_vector_grad(&mut self.grads.d_gamma),
-            Param::vector(&mut self.beta).with_vector_grad(&mut self.grads.d_beta),
+            Param::new(&mut self.gamma).with_grad(&mut self.grads.d_gamma),
+            Param::new(&mut self.beta).with_grad(&mut self.grads.d_beta),
         ]
+    }
+}
+
+impl ToIntermediates for LayerNorm {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.o, &mut self.cache.x_h]
     }
 }

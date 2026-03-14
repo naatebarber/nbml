@@ -1,16 +1,12 @@
 use ndarray::{Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 
+use crate::optim::{ToIntermediates, ToParams};
+
 #[derive(Default, Debug, Clone)]
 pub struct SequencePoolingCache {
     pub mask: Array2<f64>,
     pub seq_lens: Array2<f64>,
-}
-
-impl SequencePoolingCache {
-    pub fn clear(&mut self) {
-        *self = SequencePoolingCache::default()
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -52,5 +48,17 @@ impl SequencePooling {
         let d_loss_masked = &d_loss_3d * &self.cache.mask.clone().insert_axis(Axis(2));
 
         d_loss_masked
+    }
+}
+
+impl ToParams for SequencePooling {
+    fn params(&mut self) -> Vec<crate::optim::Param> {
+        vec![]
+    }
+}
+
+impl ToIntermediates for SequencePooling {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.mask, &mut self.cache.seq_lens]
     }
 }

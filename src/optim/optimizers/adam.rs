@@ -1,17 +1,9 @@
-use ndarray::{Array1, Array2, Axis};
+use ndarray::ArrayD;
 use serde::{Deserialize, Serialize};
 
-use crate::f;
+use crate::optim::{Optimizer, ToParams};
 
-use crate::optim::{Optimizer, ParamValue, ToParams};
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum AdamParam {
-    None,
-    Scalar { m: f64, v: f64 },
-    Vector { m: Array1<f64>, v: Array1<f64> },
-    Matrix { m: Array2<f64>, v: Array2<f64> },
-}
+pub type AdamParam = Option<(ArrayD<f64>, ArrayD<f64>)>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AdamW {
@@ -45,21 +37,11 @@ impl Optimizer for AdamW {
     fn with(mut self, optimizable: &mut impl ToParams) -> Self {
         let params = optimizable.params();
 
-        unsafe {
-            for param in params {
-                self.params.push(match param.target {
-                    ParamValue::None => AdamParam::None,
-                    ParamValue::Scalar(_) => AdamParam::Scalar { m: 0., v: 0. },
-                    ParamValue::Vector(target) => AdamParam::Vector {
-                        m: Array1::zeros((*target).len()),
-                        v: Array1::zeros((*target).len()),
-                    },
-                    ParamValue::Matrix(target) => AdamParam::Matrix {
-                        m: Array2::zeros((*target).dim()),
-                        v: Array2::zeros((*target).dim()),
-                    },
-                });
-            }
+        for param in params {
+            self.params.push(match param.target {
+                Some(target) => Some((ArrayD::zeros(target.dim()), ArrayD::zeros(target.dim()))),
+                None => None,
+            });
         }
 
         self
@@ -74,49 +56,27 @@ impl Optimizer for AdamW {
             for (param, adam_param) in optimizable.params().into_iter().zip(self.params.iter_mut())
             {
                 match (adam_param, param.target, param.grad) {
-                    (
-                        AdamParam::Scalar { m, v },
-                        ParamValue::Scalar(target),
-                        ParamValue::Scalar(grad),
-                    ) => {
-                        let g = (*grad).to_owned();
-                        *m = self.beta1 * *m + (1. - self.beta1) * g;
-                        *v = self.beta2 * *v + (1. - self.beta2) * g.powi(2);
+                    (Some((m, v)), Some(target), Some(grad)) => {
+                        assert!(
+                            target.dim() == grad.dim(),
+                            "attempted to update target of dim {:?} with grad of dim {:?}",
+                            target.dim(),
+                            grad.dim()
+                        );
 
-                        let m_hat = (*m) / (1. - bc1);
-                        let v_hat = (*v) / (1. - bc2);
+                        let mut grad_view = grad.deref_into_view_mut();
+                        let mut target_view = target.deref_into_view_mut();
 
-                        let delta = self.learning_rate * m_hat / (v_hat.sqrt() + self.epsilon);
-                        *target -= delta;
-                    }
-                    (
-                        AdamParam::Vector { m, v },
-                        ParamValue::Vector(target),
-                        ParamValue::Vector(grad),
-                    ) => {
-                        let g = (*grad).to_owned();
-                        let g = f::clip_grad(g.insert_axis(Axis(0)), self.clip_grad)
-                            .remove_axis(Axis(0));
+                        // Clip grad
+                        let norm_sq = grad_view.mapv(|x| x * x).sum();
+                        let norm = norm_sq.sqrt();
 
-                        *m = self.beta1 * &(*m) + (1. - self.beta1) * &g;
-                        *v = self.beta2 * &(*v) + (1. - self.beta2) * g.powi(2);
+                        if norm > self.clip_grad {
+                            grad_view.mapv_inplace(|x| x * (self.clip_grad / (norm + 1e-6)));
+                        }
 
-                        let m_hat = &(*m) / (1. - bc1);
-                        let v_hat = &(*v) / (1. - bc2);
-
-                        let delta = self.learning_rate * m_hat / (v_hat.sqrt() + self.epsilon);
-                        *target -= &delta;
-                    }
-                    (
-                        AdamParam::Matrix { m, v },
-                        ParamValue::Matrix(target),
-                        ParamValue::Matrix(grad),
-                    ) => {
-                        let g = (*grad).to_owned();
-                        let g = f::clip_grad(g, self.clip_grad);
-
-                        *m = self.beta1 * &(*m) + (1. - self.beta1) * &g;
-                        *v = self.beta2 * &(*v) + (1. - self.beta2) * g.powi(2);
+                        *m = self.beta1 * &(*m) + (1. - self.beta1) * &grad_view;
+                        *v = self.beta2 * &(*v) + (1. - self.beta2) * grad_view.powi(2);
 
                         let m_hat = &(*m) / (1. - bc1);
                         let v_hat = &(*v) / (1. - bc2);
@@ -124,10 +84,10 @@ impl Optimizer for AdamW {
                         let delta = m_hat / (v_hat.sqrt() + self.epsilon);
 
                         if param.enable_weight_decay {
-                            *target -=
-                                &(self.learning_rate * &(&delta + self.weight_decay * &(*target)));
+                            target_view -= &(self.learning_rate
+                                * &(&delta + self.weight_decay * &target_view));
                         } else {
-                            *target -= &(&delta * self.learning_rate);
+                            target_view -= &(&delta * self.learning_rate);
                         }
                     }
                     _ => (),

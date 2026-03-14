@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::f::Activation;
 use crate::layers::LayerNorm;
 use crate::nn::{FFN, SelfAttention};
-use crate::optim::{Param, ToParams};
+use crate::optim::{Param, ToIntermediates, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transformer {
@@ -124,5 +124,18 @@ impl ToParams for Transformer {
         params.append(&mut self.norm_feed_forward.params());
 
         params
+    }
+}
+
+impl ToIntermediates for Transformer {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        let mut intermediates = vec![];
+
+        intermediates.append(&mut self.attn.intermediates());
+        intermediates.append(&mut self.norm_attn.intermediates());
+        intermediates.append(&mut self.feed_forward.intermediates());
+        intermediates.append(&mut self.norm_feed_forward.intermediates());
+
+        intermediates
     }
 }

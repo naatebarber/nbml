@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::optim::{Optimizer, ParamValue, ToParams};
+use crate::optim::{Optimizer, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SGD {
@@ -24,14 +24,18 @@ impl Optimizer for SGD {
         unsafe {
             for param in optimizable.params().into_iter() {
                 match (param.target, param.grad) {
-                    (ParamValue::Scalar(target), ParamValue::Scalar(grad)) => {
-                        *target -= *grad * self.learning_rate;
-                    }
-                    (ParamValue::Vector(target), ParamValue::Vector(grad)) => {
-                        *target -= &(&(*grad) * self.learning_rate);
-                    }
-                    (ParamValue::Matrix(target), ParamValue::Matrix(grad)) => {
-                        *target -= &(&(*grad) * self.learning_rate);
+                    (Some(target), Some(grad)) => {
+                        assert!(
+                            target.dim() == grad.dim(),
+                            "attempted to update target of dim {:?} with grad of dim {:?}",
+                            target.dim(),
+                            grad.dim()
+                        );
+
+                        let mut target_view = target.deref_into_view_mut();
+                        let grad_view = grad.deref_into_view();
+
+                        target_view -= &(&grad_view * self.learning_rate);
                     }
                     _ => (),
                 }

@@ -1,9 +1,42 @@
 use nbml::{
     f::Activation,
     nn::FFN,
-    optim::{AdamW, Optimizer, ToParams},
+    optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
 use ndarray::Array2;
+use ndarray_rand::{RandomExt, rand_distr::Uniform};
+
+#[test]
+fn intermediate_caching() {
+    let mut model = FFN::new(vec![(4, 8, Activation::Relu), (8, 4, Activation::Sigmoid)]);
+    let x = Array2::random((2, 4), Uniform::new(0., 1.));
+    let x2 = Array2::random((2, 4), Uniform::new(0., 1.));
+    let d = Array2::ones((2, 4));
+
+    model.forward(x.clone(), true);
+    let cache_a = model.stash_intermediates();
+    model.backward(d.clone());
+    let grads_a = model.layers[0].grads.clone();
+    model.zero_grads();
+
+    model.forward(x2.clone(), true);
+    let cache_b = model.stash_intermediates();
+    model.backward(d.clone());
+    let grads_b = model.layers[0].grads.clone();
+    model.zero_grads();
+
+    model.apply_intermediates(cache_a.clone());
+    model.backward(d.clone());
+    let grads_c = model.layers[0].grads.clone();
+
+    assert!(x != x2);
+    assert!(cache_a != cache_b);
+    assert!(grads_a.d_w != grads_b.d_w);
+    assert!(
+        grads_a.d_w == grads_c.d_w,
+        "intermediate caching process fucks with gradients"
+    );
+}
 
 #[test]
 fn ffn_learns_xor() {

@@ -85,8 +85,8 @@ pub struct Affine {
 impl ToParams for Affine {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&self.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&self.d_b),
+            Param::new(&mut self.w).with_grad(&self.d_w),
+            Param::new(&mut self.b).with_grad(&self.d_b),
         ]
     }
 }

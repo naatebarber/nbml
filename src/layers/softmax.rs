@@ -1,17 +1,14 @@
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
-use crate::f;
+use crate::{
+    f,
+    optim::{ToIntermediates, ToParams},
+};
 
 #[derive(Default, Debug, Clone)]
 pub struct SoftmaxCache {
     pub softmax: Array2<f64>,
-}
-
-impl SoftmaxCache {
-    pub fn clear(&mut self) {
-        *self = SoftmaxCache::default()
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -39,5 +36,17 @@ impl Softmax {
 
     pub fn backward(&mut self, d_loss: Array2<f64>) -> Array2<f64> {
         f::d_softmax(&self.cache.softmax, &d_loss)
+    }
+}
+
+impl ToParams for Softmax {
+    fn params(&mut self) -> Vec<crate::optim::Param> {
+        vec![]
+    }
+}
+
+impl ToIntermediates for Softmax {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.softmax]
     }
 }

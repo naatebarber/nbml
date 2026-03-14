@@ -3,18 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f::InitializationFn,
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 #[derive(Default, Debug, Clone)]
 pub struct Conv2DCache {
     pub stack: Array2<f64>,
-}
-
-impl Conv2DCache {
-    pub fn clear(&mut self) {
-        *self = Conv2DCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -178,21 +172,21 @@ impl Conv2D {
 impl ToParams for Conv2D {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.grads.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
+            Param::new(&mut self.w).with_grad(&mut self.grads.d_w),
+            Param::new(&mut self.b).with_grad(&mut self.grads.d_b),
         ]
+    }
+}
+
+impl ToIntermediates for Conv2D {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.stack]
     }
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct PatchwiseConv2DCache {
     pub x: Array4<f64>,
-}
-
-impl PatchwiseConv2DCache {
-    pub fn clear(&mut self) {
-        *self = PatchwiseConv2DCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -324,8 +318,14 @@ impl PatchwiseConv2D {
 impl ToParams for PatchwiseConv2D {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.grads.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
+            Param::new(&mut self.w).with_grad(&mut self.grads.d_w),
+            Param::new(&mut self.b).with_grad(&mut self.grads.d_b),
         ]
+    }
+}
+
+impl ToIntermediates for PatchwiseConv2D {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.x]
     }
 }

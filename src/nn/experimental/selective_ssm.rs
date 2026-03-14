@@ -139,10 +139,10 @@ impl SelectiveSSM {
 impl ToParams for SelectiveSSM {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.t_w).with_matrix_grad(&mut self.d_tw),
-            Param::vector(&mut self.t_b).with_vector_grad(&mut self.d_tb),
-            Param::matrix(&mut self.b).with_matrix_grad(&mut self.d_b),
-            Param::matrix(&mut self.c).with_matrix_grad(&mut self.d_c),
+            Param::new(&mut self.t_w).with_grad(&mut self.d_tw),
+            Param::new(&mut self.t_b).with_grad(&mut self.d_tb),
+            Param::new(&mut self.b).with_grad(&mut self.d_b),
+            Param::new(&mut self.c).with_grad(&mut self.d_c),
         ]
     }
 }

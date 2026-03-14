@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f::{self, d_softmax},
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 #[derive(Default, Debug, Clone)]
@@ -14,12 +14,6 @@ pub struct AttentionCache {
     pub k: Array3<f64>,
     pub v: Array3<f64>,
     pub weights: Array3<f64>,
-}
-
-impl AttentionCache {
-    pub fn clear(&mut self) {
-        *self = AttentionCache::default()
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -129,16 +123,21 @@ impl Attention {
     }
 }
 
+impl ToIntermediates for Attention {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![
+            &mut self.cache.q,
+            &mut self.cache.k,
+            &mut self.cache.v,
+            &mut self.cache.weights,
+        ]
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct SelfAttentionCache {
     pub x_2d: Array2<f64>,
     pub attn_2d: Array2<f64>,
-}
-
-impl SelfAttentionCache {
-    pub fn clear(&mut self) {
-        *self = SelfAttentionCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -333,11 +332,23 @@ impl SelfAttention {
 impl ToParams for SelfAttention {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_qkv).with_matrix_grad(&mut self.grads.d_w_qkv),
-            Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.grads.d_b_qkv),
-            Param::matrix(&mut self.w_o).with_matrix_grad(&mut self.grads.d_w_o),
-            Param::vector(&mut self.b_o).with_vector_grad(&mut self.grads.d_b_o),
+            Param::new(&mut self.w_qkv).with_grad(&mut self.grads.d_w_qkv),
+            Param::new(&mut self.b_qkv).with_grad(&mut self.grads.d_b_qkv),
+            Param::new(&mut self.w_o).with_grad(&mut self.grads.d_w_o),
+            Param::new(&mut self.b_o).with_grad(&mut self.grads.d_b_o),
         ]
+    }
+}
+
+impl ToIntermediates for SelfAttention {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        let mut intermediates = vec![];
+
+        intermediates.append(&mut self.attention.intermediates());
+        intermediates.push(&mut self.cache.x_2d);
+        intermediates.push(&mut self.cache.attn_2d);
+
+        intermediates
     }
 }
 
@@ -346,12 +357,6 @@ pub struct CrossAttentionCache {
     pub x_q_2d: Array2<f64>,
     pub x_kv_2d: Array2<f64>,
     pub attn_2d: Array2<f64>,
-}
-
-impl CrossAttentionCache {
-    pub fn clear(&mut self) {
-        *self = CrossAttentionCache::default()
-    }
 }
 
 #[derive(Default, Debug, Clone)]
@@ -580,12 +585,25 @@ impl CrossAttention {
 impl ToParams for CrossAttention {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_q).with_matrix_grad(&mut self.grads.d_w_q),
-            Param::vector(&mut self.b_q).with_vector_grad(&mut self.grads.d_b_q),
-            Param::matrix(&mut self.w_kv).with_matrix_grad(&mut self.grads.d_w_kv),
-            Param::vector(&mut self.b_kv).with_vector_grad(&mut self.grads.d_b_kv),
-            Param::matrix(&mut self.w_o).with_matrix_grad(&mut self.grads.d_w_o),
-            Param::vector(&mut self.b_o).with_vector_grad(&mut self.grads.d_b_o),
+            Param::new(&mut self.w_q).with_grad(&mut self.grads.d_w_q),
+            Param::new(&mut self.b_q).with_grad(&mut self.grads.d_b_q),
+            Param::new(&mut self.w_kv).with_grad(&mut self.grads.d_w_kv),
+            Param::new(&mut self.b_kv).with_grad(&mut self.grads.d_b_kv),
+            Param::new(&mut self.w_o).with_grad(&mut self.grads.d_w_o),
+            Param::new(&mut self.b_o).with_grad(&mut self.grads.d_b_o),
         ]
+    }
+}
+
+impl ToIntermediates for CrossAttention {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        let mut intermediates = vec![];
+
+        intermediates.append(&mut self.attention.intermediates());
+        intermediates.push(&mut self.cache.x_q_2d);
+        intermediates.push(&mut self.cache.x_kv_2d);
+        intermediates.push(&mut self.cache.attn_2d);
+
+        intermediates
     }
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     f::Activation,
     nn::{FFN, SNNReservoir},
-    optim::ToParams,
+    optim::{ToIntermediates, ToParams},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -44,5 +44,11 @@ impl LSM {
 impl ToParams for LSM {
     fn params(&mut self) -> Vec<crate::optim::Param> {
         self.readout.params()
+    }
+}
+
+impl ToIntermediates for LSM {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        self.readout.intermediates()
     }
 }

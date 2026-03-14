@@ -1,11 +1,44 @@
 use nbml::{
     f::positional_encoding_seq,
     nn::Transformer,
-    optim::{AdamW, Optimizer, ToParams},
+    optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, s, stack};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use rand::{Rng, rng};
+
+#[test]
+fn intermediate_caching() {
+    let mut model = Transformer::new_encoder(8, 4, 2);
+    let x = Array3::random((2, 3, 8), Uniform::new(0., 1.));
+    let x2 = Array3::random((2, 3, 8), Uniform::new(0., 1.));
+    let mask = Array2::ones((2, 3));
+    let d = Array3::ones((2, 3, 8));
+
+    model.forward(x.clone(), mask.clone(), true);
+    let cache_a = model.stash_intermediates();
+    model.backward(d.clone());
+    let grads_a = model.attn.grads.clone();
+    model.zero_grads();
+
+    model.forward(x2.clone(), mask.clone(), true);
+    let cache_b = model.stash_intermediates();
+    model.backward(d.clone());
+    let grads_b = model.attn.grads.clone();
+    model.zero_grads();
+
+    model.apply_intermediates(cache_a.clone());
+    model.backward(d.clone());
+    let grads_c = model.attn.grads.clone();
+
+    assert!(x != x2);
+    assert!(cache_a != cache_b);
+    assert!(grads_a.d_w_o != grads_b.d_w_o);
+    assert!(
+        grads_a.d_w_o == grads_c.d_w_o,
+        "intermediate caching process fucks with gradients"
+    );
+}
 
 const EMBED_DIM: usize = 16;
 const D_HEAD: usize = 8;

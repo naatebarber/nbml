@@ -3,24 +3,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 pub type LayerDef = (usize, usize, f::Activation);
 
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct LayerCache {
     pub x: Array2<f64>,
     pub z: Array2<f64>,
 }
 
-impl LayerCache {
-    pub fn clear(&mut self) {
-        *self = LayerCache::default()
-    }
-}
-
-#[derive(Default, Debug, Clone)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct LayerGrads {
     pub d_w: Array2<f64>,
     pub d_b: Array1<f64>,
@@ -86,9 +80,15 @@ impl Layer {
 impl ToParams for Layer {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w).with_matrix_grad(&mut self.grads.d_w),
-            Param::vector(&mut self.b).with_vector_grad(&mut self.grads.d_b),
+            Param::new(&mut self.w).with_grad(&mut self.grads.d_w),
+            Param::new(&mut self.b).with_grad(&mut self.grads.d_b),
         ]
+    }
+}
+
+impl ToIntermediates for Layer {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![&mut self.cache.x, &mut self.cache.z]
     }
 }
 
@@ -131,5 +131,15 @@ impl ToParams for FFN {
             .iter_mut()
             .for_each(|l| params.append(&mut l.params()));
         params
+    }
+}
+
+impl ToIntermediates for FFN {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        let mut intermediates = vec![];
+        self.layers
+            .iter_mut()
+            .for_each(|l| intermediates.append(&mut l.intermediates()));
+        intermediates
     }
 }

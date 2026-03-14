@@ -1,11 +1,44 @@
 use nbml::{
     f,
     nn::{Attention, CrossAttention, SelfAttention},
-    optim::{AdamW, Optimizer, ToParams},
+    optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use rand::{rng, seq::IteratorRandom};
+
+#[test]
+fn intermediate_caching() {
+    let mut attn = SelfAttention::new(10, 5, 2);
+    let x = Array3::random((1, 1, 10), Uniform::new(0., 1.));
+    let x2 = Array3::random((1, 1, 10), Uniform::new(0., 1.));
+
+    let d = Array3::ones((1, 1, 10));
+
+    attn.forward(x.clone(), Array3::ones((1, 1, 1)), true);
+    let cache_a = attn.stash_intermediates();
+    attn.backward(d.clone());
+    let grads_a = attn.grads.clone();
+    attn.zero_grads();
+
+    attn.forward(x2.clone(), Array3::ones((1, 1, 1)), true);
+    let cache_b = attn.stash_intermediates();
+    attn.backward(d.clone());
+    let grads_b = attn.grads.clone();
+    attn.zero_grads();
+
+    attn.apply_intermediates(cache_a.clone());
+    attn.backward(d.clone());
+    let grads_c = attn.grads.clone();
+
+    assert!(x != x2);
+    assert!(cache_a != cache_b);
+    assert!(grads_a.d_w_o != grads_b.d_w_o);
+    assert!(
+        grads_a.d_w_o == grads_c.d_w_o,
+        "intermediate caching process fucks with gradients"
+    )
+}
 
 #[test]
 fn attention_scores() {

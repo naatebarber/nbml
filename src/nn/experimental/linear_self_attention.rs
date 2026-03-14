@@ -226,10 +226,10 @@ impl LinearSelfAttention {
 impl ToParams for LinearSelfAttention {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::matrix(&mut self.w_qkv).with_matrix_grad(&mut self.d_w_qkv),
-            Param::vector(&mut self.b_qkv).with_vector_grad(&mut self.d_b_qkv),
-            Param::matrix(&mut self.w_o).with_matrix_grad(&mut self.d_w_o),
-            Param::vector(&mut self.b_o).with_vector_grad(&mut self.d_b_o),
+            Param::new(&mut self.w_qkv).with_grad(&mut self.d_w_qkv),
+            Param::new(&mut self.b_qkv).with_grad(&mut self.d_b_qkv),
+            Param::new(&mut self.w_o).with_grad(&mut self.d_w_o),
+            Param::new(&mut self.b_o).with_grad(&mut self.d_b_o),
         ]
     }
 }
