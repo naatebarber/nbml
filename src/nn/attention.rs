@@ -151,21 +151,21 @@ pub struct SelfAttentionGrads {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SelfAttention {
-    d_in: usize,
-    d_head: usize,
-    n_head: usize,
+    pub d_in: usize,
+    pub d_head: usize,
+    pub n_head: usize,
 
-    w_qkv: Array2<f64>,
-    b_qkv: Array1<f64>,
-    w_o: Array2<f64>,
-    b_o: Array1<f64>,
+    pub w_qkv: Array2<f64>,
+    pub b_qkv: Array1<f64>,
+    pub w_o: Array2<f64>,
+    pub b_o: Array1<f64>,
 
     pub attention: Attention,
 
     #[serde(skip)]
-    cache: SelfAttentionCache,
+    pub cache: SelfAttentionCache,
     #[serde(skip)]
-    grads: SelfAttentionGrads,
+    pub grads: SelfAttentionGrads,
 }
 
 impl SelfAttention {
@@ -366,23 +366,23 @@ pub struct CrossAttentionGrads {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CrossAttention {
-    d_in: usize,
-    d_head: usize,
-    n_head: usize,
+    pub d_in: usize,
+    pub d_head: usize,
+    pub n_head: usize,
 
-    w_q: Array2<f64>,
-    b_q: Array1<f64>,
-    w_kv: Array2<f64>,
-    b_kv: Array1<f64>,
-    w_o: Array2<f64>,
-    b_o: Array1<f64>,
+    pub w_q: Array2<f64>,
+    pub b_q: Array1<f64>,
+    pub w_kv: Array2<f64>,
+    pub b_kv: Array1<f64>,
+    pub w_o: Array2<f64>,
+    pub b_o: Array1<f64>,
 
     pub attention: Attention,
 
     #[serde(skip)]
-    cache: CrossAttentionCache,
+    pub cache: CrossAttentionCache,
     #[serde(skip)]
-    grads: CrossAttentionGrads,
+    pub grads: CrossAttentionGrads,
 }
 
 impl CrossAttention {

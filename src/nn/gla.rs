@@ -43,21 +43,21 @@ pub struct GLAGrads {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GatedLinearAttention {
-    d_in: usize,
-    d_head: usize,
-    n_head: usize,
+    pub d_in: usize,
+    pub d_head: usize,
+    pub n_head: usize,
 
-    w_qkv: Array2<f64>,
-    b_qkv: Array1<f64>,
-    w_forget: Array2<f64>,
-    b_forget: Array1<f64>,
-    w_o: Array2<f64>,
-    b_o: Array1<f64>,
+    pub w_qkv: Array2<f64>,
+    pub b_qkv: Array1<f64>,
+    pub w_forget: Array2<f64>,
+    pub b_forget: Array1<f64>,
+    pub w_o: Array2<f64>,
+    pub b_o: Array1<f64>,
 
     #[serde(skip)]
-    cache: GLACache,
+    pub cache: GLACache,
     #[serde(skip)]
-    grads: GLAGrads,
+    pub grads: GLAGrads,
 }
 
 impl GatedLinearAttention {

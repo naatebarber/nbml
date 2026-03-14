@@ -36,9 +36,9 @@ pub struct LinearSSM {
     pub c: Array2<f64>,
 
     #[serde(skip)]
-    cache: LinearSSMCache,
+    pub cache: LinearSSMCache,
     #[serde(skip)]
-    grads: LinearSSMGrads,
+    pub grads: LinearSSMGrads,
 }
 
 impl LinearSSM {

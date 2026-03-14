@@ -34,9 +34,9 @@ pub struct Conv2D {
     pub b: Array1<f64>, // (C_out)
 
     #[serde(skip)]
-    cache: Conv2DCache,
+    pub cache: Conv2DCache,
     #[serde(skip)]
-    grads: Conv2DGrads,
+    pub grads: Conv2DGrads,
 }
 
 impl Conv2D {

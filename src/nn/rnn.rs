@@ -28,16 +28,16 @@ pub struct RNNGrads {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RNN {
-    d_model: usize,
+    pub d_model: usize,
 
-    w_i: Array2<f64>,
-    w_r: Array2<f64>,
-    b: Array1<f64>,
+    pub w_i: Array2<f64>,
+    pub w_r: Array2<f64>,
+    pub b: Array1<f64>,
 
     #[serde(skip)]
-    cache: RNNCache,
+    pub cache: RNNCache,
     #[serde(skip)]
-    grads: RNNGrads,
+    pub grads: RNNGrads,
 }
 
 impl RNN {
