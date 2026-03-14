@@ -70,7 +70,12 @@ Layers that are only useful as components of other modules:
 
 ### Optimizers (`nbml::optim`)
 
-Implement the `ToParams` trait for gradient-based optimization:
+#### `ToParams`
+
+`ToParams` connects your model's weights and gradients to the optimizer. Implement `params()` to return a list of `Param` entries, each pairing a weight array with its gradient. The optimizer reads these pointers on each step to update weights in-place — no ownership transfer, no framework magic.
+
+`Param::new` and `with_grad` accept any ndarray dimension (`Array1`, `Array2`, `Array3`, etc.), so you don't need separate methods per shape:
+
 ```rust
 pub struct Affine {
     w: Array2<f64>,
@@ -80,26 +85,22 @@ pub struct Affine {
     d_b: Array1<f64>,
 }
 
-// impl Affine {}
-
 impl ToParams for Affine {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::new(&mut self.w).with_grad(&self.d_w),
-            Param::new(&mut self.b).with_grad(&self.d_b),
+            Param::new(&mut self.w).with_grad(&mut self.d_w),
+            Param::new(&mut self.b).with_grad(&mut self.d_b),
         ]
     }
 }
 ```
 
-You can bubble params up:
+Params compose — bubble them up from sub-modules to build arbitrary architectures:
 ```rust
 pub struct AffineAffine {
     affine1: Affine,
     affine2: Affine,
 }
-
-// impl AffineAffine {}
 
 impl ToParams for AffineAffine {
     fn params(&mut self) -> Vec<Param> {
@@ -111,23 +112,61 @@ impl ToParams for AffineAffine {
 }
 ```
 
-`ToParams` will also let you zero gradients:
+`ToParams` also provides `zero_grads()` to reset all gradient arrays after an optimizer step:
 ```rust
 let mut aa = AffineAffine::new();
 aa.forward(x, true) // <- implement this yourself
 aa.backward(d_loss) // <- implement this yourself
+optimizer.step(&mut aa);
 aa.zero_grads();
 ```
 
 Available optimizers:
-- **`AdamW`**: Adaptive moment estimation with bias correction
-- **`SGD`**: Stochastic gradient descent with optional momentum
+- **`AdamW`**: Adaptive moment estimation with weight decay
+- **`SGD`**: Stochastic gradient descent
 
-Use `.with(&mut impl ToParams)` to prepare a stateful optimizer (like AdamW) for your network:
+Use `.with(&mut impl ToParams)` to initialize a stateful optimizer (like AdamW) for your network:
 ```rust
 let mut model = AffineAffine::new();
-let mut optim = AdamW::default().with(&mut model); // <- adamw creates momentums, values for all parameters in Model
+let mut optim = AdamW::default().with(&mut model); // creates momentum/variance state for all parameters
 ```
+
+#### `ToIntermediates`
+
+`ToIntermediates` lets you snapshot and restore a module's cached activations (the values stored during `forward()` that `backward()` needs for gradient computation). This enables training loops that aren't possible in standard frameworks:
+
+- **Recursive / weight-tied depth**: Forward the same module N times, stashing intermediates between each call. During backward, restore each stash in reverse to compute correct weight gradients for every application.
+- **Online learning with rollback**: Checkpoint recurrent state mid-sequence, run an optimizer step, then restore and continue from the checkpoint.
+
+Implement `intermediates()` to return mutable references to your cached values:
+
+```rust
+impl ToIntermediates for MyLayer {
+    fn intermediates(&mut self) -> Vec<&mut dyn Intermediate> {
+        vec![&mut self.cache.x, &mut self.cache.z]
+    }
+}
+```
+
+Then `stash_intermediates()` and `apply_intermediates()` work automatically:
+
+```rust
+let mut model = MyLayer::new();
+
+// Forward pass A
+model.forward(x_a, true);
+let stash_a = model.stash_intermediates();
+
+// Forward pass B (overwrites cache)
+model.forward(x_b, true);
+model.backward(d_loss_b); // correct grads for B
+
+// Restore A's cache, compute A's grads
+model.apply_intermediates(stash_a);
+model.backward(d_loss_a); // correct grads for A
+```
+
+Intermediates are serialized to bytes via `bincode`, so the stash is decoupled from the module's memory. This avoids pointer aliasing issues and keeps the cache types as fixed-dimension arrays (`Array1`, `Array2`, etc.) for fast math on the hot path.
 
 ### Activation Functions (`nbml::f`)
 ```rust
@@ -144,15 +183,47 @@ Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
 `nbml` is designed for:
 
 - **Experimentation / Research**: Prototyping of novel architectures, through full control of forward and backward passes
+- **Nonstandard Architectures**: A lot more freedom without autograd running the show
 - **Transparency**: No hidden magic, every operation is explicit
-- **Compute-Constrained Deployment**: Lightweight + no C deps. Very quick for small models.
+- **Compute-Constrained Deployment**: Lightweight + no C deps. Very quick for small models
 
 `nbml` is **not** designed for:
 
 - Large Scale Production deployment (use PyTorch, TensorFlow, or Burn)
-- Automatic differentiation (you write the backward pass)
+- Automatic differentiation (you wire up the backward pass for custom modules)
 - GPU acceleration (CPU-only via ndarray)
-- Plug-and-play models (you build everything yourself)
+
+The included `nn` primitives are technically plug and play, but when composing them you will have to wire `backward()` yourself.
+
+```rust
+pub struct SequenceClassifier {
+    pub transformer: GlaTransformer,
+    pub pooling: SequencePooling,
+    pub readout: Layer,
+}
+
+impl SequenceClassifier {
+    pub fn new(d_model: usize) -> Self { ... }
+
+    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array2<f64> {
+        // on-the-spot mask
+        let mask = Array3::ones((x.dim().0, x.dim().1, x.dim().1));
+        let x = self.transformer.forward(x, mask.clone(), grad); // (B, S, D)
+        let x = self.pooling.forward(x, mask); // (B, D)
+        let x = self.readout.forward(x); // (B, D)
+
+        x
+    }
+
+    pub fn backward(&mut self, d_loss: Array2<f64>) -> Array3<f64> {
+        let d_loss = self.readout.backward(d_loss); // (B, D)
+        let d_loss = self.pooling.backward(d_loss); // (B, S, D)
+        let d_loss = self.transformer.backward(d_loss); // (B, S, D)
+
+        d_loss
+    }
+}
+```
 
 ## Examples
 
