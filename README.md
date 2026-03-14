@@ -6,7 +6,7 @@ Unlike high-level frameworks, `nbml` provides bare primitives and a lightweight 
 
 ## Features
 
-- **Core primitives**: Attention, LSTM, RNN, Conv2D, Feedforward layers, etc
+- **Core primitives**: Transformers, Attention, LSTM, Conv2D, Feedforward layers, etc
 - **Activation functions**: ReLU, Sigmoid, Tanh, etc
 - **Layers**: Softmax, LayerNorm, Sequence Pooling
 - **Optimizers**: AdamW, SGD
@@ -53,11 +53,12 @@ for batch in training_data {
 - **`Conv2D`**: Explicit Im2Col Conv2D layer (CPU efficient, memory hungry)
 - **`PatchwiseConv2D`**: Patchwise Conv2D layer (CPU hungry, memory efficient)
 - **`LinearSSM`**: Discrete Linear SSM
-- **`Attention`**: Core attention primitive
+- **`Attention`**: Core softmax attention primitive
 - **`SelfAttention`**: Multi-head self attention
 - **`CrossAttention`**: Multi-head cross attention
 - **`Transformer`**: Transformer encoder/decoder block
 - **`GatedLinearAttention`**: Multi-head gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
+- **`GlaTransformer`**: Subquadratic transformer block, using gated linear attention instead of softmax attention. Similar to Mamba, RWKV, RetNet, etc.
 
 ### Layers (`nbml::layers`)
 
