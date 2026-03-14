@@ -1,30 +1,43 @@
 use ndarray::{Array1, Array2, Array3, Array4, Axis, s, stack};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     f,
-    optim::{Param, ToParams},
+    optim::{Param, ToIntermediates, ToParams},
 };
 
+#[derive(Default, Debug, Clone)]
+pub struct LinearSelfAttentionCache {
+    pub x_2d: Array2<f64>,
+    pub q: Array3<f64>,
+    pub k: Array3<f64>,
+    pub v: Array3<f64>,
+    pub states: Array4<f64>,
+    pub attn_2d: Array2<f64>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct LinearSelfAttentionGrads {
+    pub d_w_qkv: Array2<f64>,
+    pub d_b_qkv: Array1<f64>,
+    pub d_w_o: Array2<f64>,
+    pub d_b_o: Array1<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LinearSelfAttention {
-    d_in: usize,
-    d_head: usize,
+    pub d_in: usize,
+    pub d_head: usize,
 
-    w_qkv: Array2<f64>,
-    b_qkv: Array1<f64>,
-    w_o: Array2<f64>,
-    b_o: Array1<f64>,
+    pub w_qkv: Array2<f64>,
+    pub b_qkv: Array1<f64>,
+    pub w_o: Array2<f64>,
+    pub b_o: Array1<f64>,
 
-    x_2d: Array2<f64>,
-    q: Array3<f64>,
-    k: Array3<f64>,
-    v: Array3<f64>,
-    states: Array4<f64>,
-    attn_2d: Array2<f64>,
-
-    d_w_qkv: Array2<f64>,
-    d_b_qkv: Array1<f64>,
-    d_w_o: Array2<f64>,
-    d_b_o: Array1<f64>,
+    #[serde(skip)]
+    pub cache: LinearSelfAttentionCache,
+    #[serde(skip)]
+    pub grads: LinearSelfAttentionGrads,
 }
 
 impl LinearSelfAttention {
@@ -38,17 +51,8 @@ impl LinearSelfAttention {
             w_o: f::xavier_normal((d_head, d_in)),
             b_o: Array1::zeros(d_in),
 
-            x_2d: Array2::zeros((0, 0)),
-            q: Array3::zeros((0, 0, 0)),
-            k: Array3::zeros((0, 0, 0)),
-            v: Array3::zeros((0, 0, 0)),
-            states: Array4::zeros((0, 0, 0, 0)),
-            attn_2d: Array2::zeros((0, 0)),
-
-            d_w_qkv: Array2::zeros((0, 0)),
-            d_b_qkv: Array1::zeros(0),
-            d_w_o: Array2::zeros((0, 0)),
-            d_b_o: Array1::zeros(0),
+            cache: LinearSelfAttentionCache::default(),
+            grads: LinearSelfAttentionGrads::default(),
         }
     }
 
@@ -70,31 +74,13 @@ impl LinearSelfAttention {
         let k = qkv.slice(s![1, .., .., ..]);
         let v = qkv.slice(s![2, .., .., ..]);
 
-        self.x_2d = if grad { x_2d } else { Array2::zeros((0, 0)) };
-
-        self.q = if grad {
-            q.to_owned()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.k = if grad {
-            k.to_owned()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.v = if grad {
-            v.to_owned()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array4::zeros((seq_len + 1, batch_size, self.d_head, self.d_head))
-        } else {
-            Array4::zeros((0, 0, 0, 0))
-        };
+        if grad {
+            self.cache.x_2d = x_2d;
+            self.cache.q = q.to_owned();
+            self.cache.k = k.to_owned();
+            self.cache.v = v.to_owned();
+            self.cache.states = Array4::zeros((seq_len + 1, batch_size, self.d_head, self.d_head));
+        }
 
         let mut state = Array3::zeros((batch_size, self.d_head, self.d_head));
         let mut attn = Array3::zeros((batch_size, seq_len, self.d_head));
@@ -117,7 +103,10 @@ impl LinearSelfAttention {
             attn.slice_mut(s![.., t, ..]).assign(&attn_t);
 
             if grad {
-                self.states.slice_mut(s![t + 1, .., .., ..]).assign(&state);
+                self.cache
+                    .states
+                    .slice_mut(s![t + 1, .., .., ..])
+                    .assign(&state);
             }
         }
 
@@ -129,36 +118,38 @@ impl LinearSelfAttention {
             .into_shape_clone((batch_size, seq_len, self.d_in))
             .unwrap();
 
-        self.attn_2d = if grad { attn_2d } else { Array2::zeros((0, 0)) };
+        if grad {
+            self.cache.attn_2d = attn_2d;
+        }
 
         output
     }
 
     pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
         let (batch_size, seq_len, features) = d_loss.dim();
-        let (_, _, d_k, d_v) = self.states.dim();
+        let (_, _, d_k, d_v) = self.cache.states.dim();
 
-        if self.d_w_o.dim() == (0, 0) {
-            self.d_w_o = Array2::zeros(self.w_o.dim())
+        if self.grads.d_w_o.dim() == (0, 0) {
+            self.grads.d_w_o = Array2::zeros(self.w_o.dim())
         }
 
-        if self.d_b_o.dim() == 0 {
-            self.d_b_o = Array1::zeros(self.b_o.dim())
+        if self.grads.d_b_o.dim() == 0 {
+            self.grads.d_b_o = Array1::zeros(self.b_o.dim())
         }
 
-        if self.d_w_qkv.dim() == (0, 0) {
-            self.d_w_qkv = Array2::zeros(self.w_qkv.dim());
+        if self.grads.d_w_qkv.dim() == (0, 0) {
+            self.grads.d_w_qkv = Array2::zeros(self.w_qkv.dim());
         }
 
-        if self.d_b_qkv.dim() == 0 {
-            self.d_b_qkv = Array1::zeros(self.b_qkv.dim());
+        if self.grads.d_b_qkv.dim() == 0 {
+            self.grads.d_b_qkv = Array1::zeros(self.b_qkv.dim());
         }
 
         let d_loss_2d = d_loss
             .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
-        self.d_w_o += &(self.attn_2d.t().dot(&d_loss_2d));
-        self.d_b_o += &d_loss_2d.sum_axis(Axis(0));
+        self.grads.d_w_o += &(self.cache.attn_2d.t().dot(&d_loss_2d));
+        self.grads.d_b_o += &d_loss_2d.sum_axis(Axis(0));
 
         let d_loss_2d = d_loss_2d.dot(&self.w_o.t());
         let d_loss = d_loss_2d
@@ -173,10 +164,10 @@ impl LinearSelfAttention {
 
         for t in (0..seq_len).rev() {
             let d_loss_t = d_loss.slice(s![.., t, ..]); // (B, d_v)
-            let state_t = self.states.slice(s![t + 1, .., .., ..]); // (B, d_k, d_v)
-            let q_t = self.q.slice(s![.., t, ..]); // (B, d_q)
-            let k_t = self.k.slice(s![.., t, ..]); // (B, d_k)
-            let v_t = self.v.slice(s![.., t, ..]); // (B, d_v)
+            let state_t = self.cache.states.slice(s![t + 1, .., .., ..]); // (B, d_k, d_v)
+            let q_t = self.cache.q.slice(s![.., t, ..]); // (B, d_q)
+            let k_t = self.cache.k.slice(s![.., t, ..]); // (B, d_k)
+            let v_t = self.cache.v.slice(s![.., t, ..]); // (B, d_v)
 
             // (B, d_v) -> (B, 1, d_v)
             let d_loss_t = d_loss_t.to_owned().insert_axis(Axis(1));
@@ -210,8 +201,8 @@ impl LinearSelfAttention {
             .into_shape_clone((batch_size * seq_len, 3 * self.d_head))
             .unwrap();
 
-        self.d_w_qkv += &(self.x_2d.t().dot(&d_loss_qkv));
-        self.d_b_qkv += &d_loss_qkv.sum_axis(Axis(0));
+        self.grads.d_w_qkv += &(self.cache.x_2d.t().dot(&d_loss_qkv));
+        self.grads.d_b_qkv += &d_loss_qkv.sum_axis(Axis(0));
 
         let d_x_2d = d_loss_qkv.dot(&self.w_qkv.t());
 
@@ -226,10 +217,23 @@ impl LinearSelfAttention {
 impl ToParams for LinearSelfAttention {
     fn params(&mut self) -> Vec<Param> {
         vec![
-            Param::new(&mut self.w_qkv).with_grad(&mut self.d_w_qkv),
-            Param::new(&mut self.b_qkv).with_grad(&mut self.d_b_qkv),
-            Param::new(&mut self.w_o).with_grad(&mut self.d_w_o),
-            Param::new(&mut self.b_o).with_grad(&mut self.d_b_o),
+            Param::new(&mut self.w_qkv).with_grad(&mut self.grads.d_w_qkv),
+            Param::new(&mut self.b_qkv).with_grad(&mut self.grads.d_b_qkv),
+            Param::new(&mut self.w_o).with_grad(&mut self.grads.d_w_o),
+            Param::new(&mut self.b_o).with_grad(&mut self.grads.d_b_o),
+        ]
+    }
+}
+
+impl ToIntermediates for LinearSelfAttention {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![
+            &mut self.cache.x_2d,
+            &mut self.cache.q,
+            &mut self.cache.k,
+            &mut self.cache.v,
+            &mut self.cache.states,
+            &mut self.cache.attn_2d,
         ]
     }
 }

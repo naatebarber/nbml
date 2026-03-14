@@ -1,26 +1,41 @@
 use ndarray::{Array2, Array3, Array4, Axis, s};
+use serde::{Deserialize, Serialize};
 
-use crate::f;
+use crate::{
+    f,
+    optim::{Param, ToIntermediates, ToParams},
+};
 
+#[derive(Default, Debug, Clone)]
+pub struct LinearCrossAttentionCache {
+    pub x_q_2d: Array2<f64>,
+    pub x_kv_2d: Array2<f64>,
+    pub q: Array3<f64>,
+    pub k: Array3<f64>,
+    pub v: Array3<f64>,
+    pub states: Array4<f64>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct LinearCrossAttentionGrads {
+    pub d_w_q: Array2<f64>,
+    pub d_w_k: Array2<f64>,
+    pub d_w_v: Array2<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct LinearCrossAttention {
-    #[allow(unused)]
-    d_in: usize,
-    d_head: usize,
+    pub d_in: usize,
+    pub d_head: usize,
 
-    w_q: Array2<f64>,
-    w_k: Array2<f64>,
-    w_v: Array2<f64>,
+    pub w_q: Array2<f64>,
+    pub w_k: Array2<f64>,
+    pub w_v: Array2<f64>,
 
-    x_q_2d: Array2<f64>,
-    x_kv_2d: Array2<f64>,
-    q: Array3<f64>,
-    k: Array3<f64>,
-    v: Array3<f64>,
-    states: Array4<f64>,
-
-    d_w_q: Array2<f64>,
-    d_w_k: Array2<f64>,
-    d_w_v: Array2<f64>,
+    #[serde(skip)]
+    pub cache: LinearCrossAttentionCache,
+    #[serde(skip)]
+    pub grads: LinearCrossAttentionGrads,
 }
 
 impl LinearCrossAttention {
@@ -33,16 +48,8 @@ impl LinearCrossAttention {
             w_k: f::xavier_normal((d_in, d_head)),
             w_v: f::xavier_normal((d_in, d_head)),
 
-            x_q_2d: Array2::zeros((0, 0)),
-            x_kv_2d: Array2::zeros((0, 0)),
-            q: Array3::zeros((0, 0, 0)),
-            k: Array3::zeros((0, 0, 0)),
-            v: Array3::zeros((0, 0, 0)),
-            states: Array4::zeros((0, 0, 0, 0)),
-
-            d_w_q: Array2::zeros((0, 0)),
-            d_w_k: Array2::zeros((0, 0)),
-            d_w_v: Array2::zeros((0, 0)),
+            cache: LinearCrossAttentionCache::default(),
+            grads: LinearCrossAttentionGrads::default(),
         }
     }
 
@@ -71,33 +78,15 @@ impl LinearCrossAttention {
             .into_shape_clone((batch_size, seq_len_kv, self.d_head))
             .unwrap();
 
-        self.x_q_2d = if grad { x_q_2d } else { Array2::zeros((0, 0)) };
-
-        self.x_kv_2d = if grad { x_kv_2d } else { Array2::zeros((0, 0)) };
-
-        self.q = if grad {
-            q.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.k = if grad {
-            k.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.v = if grad {
-            v.clone()
-        } else {
-            Array3::zeros((0, 0, 0))
-        };
-
-        self.states = if grad {
-            Array4::zeros((seq_len_kv + 1, batch_size, self.d_head, self.d_head))
-        } else {
-            Array4::zeros((0, 0, 0, 0))
-        };
+        if grad {
+            self.cache.x_q_2d = x_q_2d;
+            self.cache.x_kv_2d = x_kv_2d;
+            self.cache.q = q.clone();
+            self.cache.k = k.clone();
+            self.cache.v = v.clone();
+            self.cache.states =
+                Array4::zeros((seq_len_kv + 1, batch_size, self.d_head, self.d_head));
+        }
 
         let mut state = Array3::zeros((batch_size, self.d_head, self.d_head));
         let mut outputs = Array3::zeros((batch_size, seq_len_q, self.d_head));
@@ -113,7 +102,10 @@ impl LinearCrossAttention {
             state = &state + &k_t_inner * &v_t_outer;
 
             if grad {
-                self.states.slice_mut(s![t + 1, .., .., ..]).assign(&state);
+                self.cache
+                    .states
+                    .slice_mut(s![t + 1, .., .., ..])
+                    .assign(&state);
             }
         }
 
@@ -134,16 +126,29 @@ impl LinearCrossAttention {
 
     pub fn backward(&mut self, d_loss: Array3<f64>) -> (Array3<f64>, Array3<f64>) {
         let (batch_size, seq_len_q, features) = d_loss.dim();
-        let (seq_len_kv, _, d_k, d_v) = self.states.dim();
+        let (seq_len_kv_plus1, _, d_k, d_v) = self.cache.states.dim();
+        let seq_len_kv = seq_len_kv_plus1 - 1;
+
+        if self.grads.d_w_q.dim() == (0, 0) {
+            self.grads.d_w_q = Array2::zeros(self.w_q.dim());
+        }
+
+        if self.grads.d_w_k.dim() == (0, 0) {
+            self.grads.d_w_k = Array2::zeros(self.w_k.dim());
+        }
+
+        if self.grads.d_w_v.dim() == (0, 0) {
+            self.grads.d_w_v = Array2::zeros(self.w_v.dim());
+        }
 
         let mut d_loss_q = Array3::zeros((batch_size, seq_len_q, features));
         let mut d_loss_state = Array3::zeros((batch_size, d_k, d_v));
 
-        let state = self.states.slice(s![-1, .., .., ..]);
+        let state = self.cache.states.slice(s![-1, .., .., ..]);
 
         for t in (0..seq_len_q).rev() {
             let d_loss_t = d_loss.slice(s![.., t, ..]); // (B, d_v)
-            let q_t = self.q.slice(s![.., t, ..]); // (B, d_k)
+            let q_t = self.cache.q.slice(s![.., t, ..]); // (B, d_k)
 
             // (B, d_v) -> (B, 1, d_v)
             let d_loss_t = d_loss_t.to_owned().insert_axis(Axis(1));
@@ -162,8 +167,8 @@ impl LinearCrossAttention {
         let mut d_loss_v = Array3::zeros((batch_size, seq_len_kv, d_v));
 
         for t in (0..seq_len_kv).rev() {
-            let k_t = self.k.slice(s![.., t, ..]); // (B, d_k)
-            let v_t = self.v.slice(s![.., t, ..]); // (B, d_v)
+            let k_t = self.cache.k.slice(s![.., t, ..]); // (B, d_k)
+            let v_t = self.cache.v.slice(s![.., t, ..]); // (B, d_v)
 
             // (B, d_v) -> (B, 1, d_v)
             // (B, 1, d_v) * (B, d_k, d_v) -> (B, d_k, sum(d_v)) -> (B, d_k)
@@ -189,9 +194,9 @@ impl LinearCrossAttention {
             .into_shape_clone((batch_size * seq_len_kv, features))
             .unwrap();
 
-        self.d_w_q += &(self.x_q_2d.t().dot(&d_loss_q_2d));
-        self.d_w_k += &(self.x_kv_2d.t().dot(&d_loss_k_2d));
-        self.d_w_v += &(self.x_kv_2d.t().dot(&d_loss_v_2d));
+        self.grads.d_w_q += &(self.cache.x_q_2d.t().dot(&d_loss_q_2d));
+        self.grads.d_w_k += &(self.cache.x_kv_2d.t().dot(&d_loss_k_2d));
+        self.grads.d_w_v += &(self.cache.x_kv_2d.t().dot(&d_loss_v_2d));
 
         let d_x_q_2d = d_loss_q_2d.dot(&self.w_q.t());
         let d_x_k_2d = d_loss_k_2d.dot(&self.w_k.t());
@@ -207,5 +212,28 @@ impl LinearCrossAttention {
             .unwrap();
 
         (d_x_q, d_x_kv)
+    }
+}
+
+impl ToParams for LinearCrossAttention {
+    fn params(&mut self) -> Vec<Param> {
+        vec![
+            Param::new(&mut self.w_q).with_grad(&mut self.grads.d_w_q),
+            Param::new(&mut self.w_k).with_grad(&mut self.grads.d_w_k),
+            Param::new(&mut self.w_v).with_grad(&mut self.grads.d_w_v),
+        ]
+    }
+}
+
+impl ToIntermediates for LinearCrossAttention {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![
+            &mut self.cache.x_q_2d,
+            &mut self.cache.x_kv_2d,
+            &mut self.cache.q,
+            &mut self.cache.k,
+            &mut self.cache.v,
+            &mut self.cache.states,
+        ]
     }
 }
