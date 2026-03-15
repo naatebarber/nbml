@@ -56,10 +56,10 @@ for batch in training_data {
 - **`Attention`**: Core softmax attention primitive
 - **`SelfAttention`**: Multi-head self attention
 - **`CrossAttention`**: Multi-head cross attention
-- **`Transformer`**: Transformer encoder/decoder block
 - **`LinearAttention`**: Linear self attention with recurrent matrix-valued state. Subquadratic alternative to softmax attention ([Katharopoulos et al., 2020](https://arxiv.org/abs/2006.16236))
-- **`LinearTransformer`**: Transformer block using linear self attention instead of softmax attention
 - **`GatedLinearAttention`**: Gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
+- **`Transformer`**: Transformer encoder/decoder block
+- **`LinearTransformer`**: Transformer block using linear self attention instead of softmax attention
 - **`GlaTransformer`**: Transformer block using gated linear attention. Similar to Mamba, RWKV, RetNet, etc.
 
 ### Layers (`nbml::layers`)
