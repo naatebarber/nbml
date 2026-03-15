@@ -16,10 +16,10 @@ pub struct GlaTransformer {
 }
 
 impl GlaTransformer {
-    pub fn new(d_in: usize, d_head: usize, n_head: usize) -> Self {
+    pub fn new(d_in: usize, d_head: usize) -> Self {
         Self {
             d_in,
-            attn: GatedLinearAttention::new(d_in, d_head, n_head),
+            attn: GatedLinearAttention::new(d_in, d_head),
             norm_attn: LayerNorm::new(d_in),
             feed_forward: FFN::new(vec![
                 (d_in, 4 * d_in, Activation::Relu),

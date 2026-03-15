@@ -3,13 +3,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::f::Activation;
 use crate::layers::LayerNorm;
-use crate::nn::{FFN, LinearSelfAttention};
+use crate::nn::{FFN, LinearAttention};
 use crate::optim::{Param, ToIntermediates, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LinearTransformer {
     pub d_in: usize,
-    pub attn: LinearSelfAttention,
+    pub attn: LinearAttention,
     pub norm_attn: LayerNorm,
     pub feed_forward: FFN,
     pub norm_feed_forward: LayerNorm,
@@ -19,7 +19,7 @@ impl LinearTransformer {
     pub fn new(d_in: usize, d_head: usize) -> Self {
         Self {
             d_in,
-            attn: LinearSelfAttention::new(d_in, d_head),
+            attn: LinearAttention::new(d_in, d_head),
             norm_attn: LayerNorm::new(d_in),
             feed_forward: FFN::new(vec![
                 (d_in, 4 * d_in, Activation::Relu),

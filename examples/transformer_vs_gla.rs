@@ -22,7 +22,7 @@ use rand::{rng, seq::IndexedRandom};
 // recall task harder, letting us see where GLA's O(n) scaling beats O(n²) attention.
 
 const D_MODEL: usize = 16;
-const D_HEAD: usize = 8;
+const D_HEAD: usize = 16;
 const N_HEAD: usize = 4;
 const N_PAIRS: usize = 4;
 const BATCH_SIZE: usize = 16;
@@ -175,7 +175,7 @@ fn train_transformer(distractors: usize) -> (f64, f64) {
 fn train_gla(distractors: usize) -> (f64, f64) {
     let vocab_size = D_MODEL;
     let seq_len = N_PAIRS * (2 + distractors) + 2;
-    let mut model = GlaTransformer::new(vocab_size, D_HEAD, N_HEAD);
+    let mut model = GlaTransformer::new(vocab_size, D_HEAD);
     let mut optim = AdamW {
         learning_rate: LEARNING_RATE,
         ..AdamW::default()

@@ -9,7 +9,7 @@ use rand::{Rng, rng};
 
 #[test]
 fn intermediate_caching() {
-    let mut model = GlaTransformer::new(8, 4, 2);
+    let mut model = GlaTransformer::new(8, 4);
     let x = Array3::random((2, 3, 8), Uniform::new(0., 1.));
     let x2 = Array3::random((2, 3, 8), Uniform::new(0., 1.));
     let d = Array3::ones((2, 3, 8));
@@ -41,7 +41,6 @@ fn intermediate_caching() {
 
 const EMBED_DIM: usize = 16;
 const D_HEAD: usize = 8;
-const NUM_HEADS: usize = 2;
 const SEQ_LEN: usize = 4;
 const BATCH_SIZE: usize = 4;
 
@@ -49,7 +48,7 @@ const BATCH_SIZE: usize = 4;
 fn identity() {
     println!("=== Testing GLA Transformer End-to-End ===\n");
 
-    let mut transformer = GlaTransformer::new(EMBED_DIM, D_HEAD, NUM_HEADS);
+    let mut transformer = GlaTransformer::new(EMBED_DIM, D_HEAD);
 
     let mut optim = AdamW::default().with(&mut transformer);
     optim.learning_rate = 1e-3;
@@ -104,7 +103,7 @@ pub fn mean_pooling() {
     println!("Output should be the mean of all sequence positions");
     println!("This tests if attention mechanism works\n");
 
-    let mut transformer2 = GlaTransformer::new(EMBED_DIM, D_HEAD, NUM_HEADS);
+    let mut transformer2 = GlaTransformer::new(EMBED_DIM, D_HEAD);
 
     let mut optim2 = AdamW::default().with(&mut transformer2);
     optim2.learning_rate = 1e-3;
@@ -157,7 +156,7 @@ pub fn mean_pooling() {
 
 #[test]
 fn gradient_flow() {
-    let mut transformer = GlaTransformer::new(EMBED_DIM, D_HEAD, NUM_HEADS);
+    let mut transformer = GlaTransformer::new(EMBED_DIM, D_HEAD);
 
     let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
     let y = transformer.forward(x.clone(), true);
@@ -201,7 +200,7 @@ fn gradient_flow() {
 
 #[test]
 fn overfitting() {
-    let mut transformer = GlaTransformer::new(EMBED_DIM, D_HEAD, NUM_HEADS);
+    let mut transformer = GlaTransformer::new(EMBED_DIM, D_HEAD);
 
     let mut optim = AdamW::default().with(&mut transformer);
     optim.learning_rate = 6e-3; // Higher learning rate for faster overfitting
@@ -256,7 +255,7 @@ fn retrieval_by_marker() {
     // The marker position (one-hot in last dim) tells which vector to output.
     // This is pure content-based attention - what transformers are MADE for.
 
-    let mut model = GlaTransformer::new(16, 6, 4);
+    let mut model = GlaTransformer::new(16, 6);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
@@ -330,7 +329,7 @@ fn fixed_position_retrieval() {
     //
     // Always retrieve position 2. No marker, just "learn that position 5 copies position 2"
 
-    let mut model = GlaTransformer::new(16, 8, 2);
+    let mut model = GlaTransformer::new(16, 8);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
@@ -393,7 +392,7 @@ fn delayed_copy_single_token() {
     // Position 6 copies position 1
     // etc.
 
-    let mut model = GlaTransformer::new(16, 8, 2);
+    let mut model = GlaTransformer::new(16, 8);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
@@ -452,7 +451,7 @@ fn delayed_copy_single_token() {
 
 #[test]
 fn memorize_one_delayed_copy() {
-    let mut model = GlaTransformer::new(16, 8, 2);
+    let mut model = GlaTransformer::new(16, 8);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-3;
 

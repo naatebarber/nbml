@@ -3,7 +3,7 @@ use std::time::Instant;
 use nbml::{
     ndarray::{Array2, Array3, Axis, s},
     ndarray_rand::{RandomExt, rand_distr::Uniform},
-    nn::LinearSelfAttention,
+    nn::LinearAttention,
     optim::{AdamW, Optimizer, ToParams},
 };
 use rand::Rng;
@@ -41,7 +41,7 @@ pub fn associative_recall() {
     println!("d_model {d_model} seq_len {}", num_pairs * 2);
     let start = Instant::now();
 
-    let mut model = LinearSelfAttention::new(d_model, 2 * d_model);
+    let mut model = LinearAttention::new(d_model, 2 * d_model);
     let mut optim = AdamW::default().with(&mut model);
 
     for epoch in 0..500 {
