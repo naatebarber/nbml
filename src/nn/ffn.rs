@@ -8,13 +8,13 @@ use crate::{
 
 pub type LayerDef = (usize, usize, f::Activation);
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone)]
 pub struct LayerCache {
     pub x: Array2<f64>,
     pub z: Array2<f64>,
 }
 
-#[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone)]
 pub struct LayerGrads {
     pub d_w: Array2<f64>,
     pub d_b: Array1<f64>,

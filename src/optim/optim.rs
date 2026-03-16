@@ -1,4 +1,4 @@
-use ndarray::{ArrayBase, DataMut, Dimension, IxDyn, RawArrayViewMut};
+use ndarray::{Array, ArrayBase, ArrayD, DataMut, Dimension, IxDyn, RawArrayViewMut};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
@@ -58,22 +58,24 @@ pub trait ToParams {
 }
 
 pub trait Intermediate {
-    fn stash(&self) -> Vec<u8>;
-    fn apply(&mut self, bytes: &Vec<u8>);
+    fn stash(&self) -> ArrayD<f64>;
+    fn apply(&mut self, stashed: ArrayD<f64>);
     fn clear(&mut self);
 }
 
-impl<T: Serialize + Deserialize<'static> + Default> Intermediate for T {
-    fn stash(&self) -> Vec<u8> {
-        bincode::serialize(self).unwrap()
+pub type IntermediateCache = Vec<ArrayD<f64>>;
+
+impl<D: Dimension> Intermediate for Array<f64, D> {
+    fn stash(&self) -> ArrayD<f64> {
+        self.clone().into_dyn()
     }
-    fn apply(&mut self, bytes: &Vec<u8>) {
-        unsafe {
-            *self = bincode::deserialize((bytes as *const Vec<u8>).as_ref().unwrap()).unwrap();
-        }
+
+    fn apply(&mut self, stashed: ArrayD<f64>) {
+        *self = stashed.into_dimensionality().unwrap();
     }
+
     fn clear(&mut self) {
-        *self = T::default();
+        self.fill(0.0);
     }
 }
 
@@ -82,19 +84,19 @@ pub trait ToIntermediates {
         vec![]
     }
 
-    fn stash_intermediates(&mut self) -> Vec<Vec<u8>> {
+    fn stash_intermediates(&mut self) -> Vec<ArrayD<f64>> {
         self.intermediates()
             .into_iter()
             .map(|i| i.stash())
             .collect()
     }
 
-    fn apply_intermediates(&mut self, intermediates_b: Vec<Vec<u8>>) {
+    fn apply_intermediates(&mut self, intermediates_b: Vec<ArrayD<f64>>) {
         self.intermediates()
             .into_iter()
             .zip(intermediates_b.into_iter())
             .for_each(|(i, b)| {
-                i.apply(&b);
+                i.apply(b);
             });
     }
 }

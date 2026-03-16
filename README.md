@@ -66,6 +66,7 @@ for batch in training_data {
 
 Layers that are only useful as components of other modules:
 
+- **`Linear`**: Affine transformation
 - **`Softmax`**: Row-wise softmax
 - **`LayerNorm`**: Layer normalization
 - **`SequencePooling`**: Sequence mean-pooling
@@ -168,13 +169,13 @@ model.apply_intermediates(stash_a);
 model.backward(d_loss_a); // correct grads for A
 ```
 
-Intermediates are serialized to bytes via `bincode`, so the stash is decoupled from the module's memory. This avoids pointer aliasing issues and keeps the cache types as fixed-dimension arrays (`Array1`, `Array2`, etc.) for fast math on the hot path.
+Intermediates are returned from `stash_intermediates` as `Vec<ArrayD<T>>` - aliased as `IntermediateCache`.
 
 ### Activation Functions (`nbml::f`)
 ```rust
 use nbml::f;
 
-let x = Array1::from_vec(vec![-1.0, 0.0, 1.0]);
+let x = Array2::from_vec(vec![-1.0, 0.0, 1.0]);
 let activated = f::relu(&x);
 ```
 
