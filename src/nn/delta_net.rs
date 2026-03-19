@@ -1,0 +1,321 @@
+use ndarray::{Array1, Array2, Array3, Array4, Axis, s, stack};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    f,
+    optim::{Param, ToIntermediates, ToParams},
+};
+
+#[derive(Default, Debug, Clone)]
+pub struct DeltaNetCache {
+    pub x_2d: Array2<f64>,
+    pub q: Array3<f64>,
+    pub k: Array3<f64>,
+    pub v: Array3<f64>,
+    pub beta_preactivations: Array2<f64>,
+    pub beta: Array3<f64>,
+    pub addresses_forget: Array4<f64>,
+    pub addresses_insert: Array4<f64>,
+    pub states: Array4<f64>,
+    pub attn_2d: Array2<f64>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct DeltaNetGrads {
+    pub d_w_qkv: Array2<f64>,
+    pub d_b_qkv: Array1<f64>,
+    pub d_w_beta: Array2<f64>,
+    pub d_b_beta: Array1<f64>,
+    pub d_w_o: Array2<f64>,
+    pub d_b_o: Array1<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeltaNet {
+    pub d_in: usize,
+    pub d_head: usize,
+
+    pub w_qkv: Array2<f64>,
+    pub b_qkv: Array1<f64>,
+    pub w_beta: Array2<f64>,
+    pub b_beta: Array1<f64>,
+    pub w_o: Array2<f64>,
+    pub b_o: Array1<f64>,
+
+    #[serde(skip)]
+    pub cache: DeltaNetCache,
+    #[serde(skip)]
+    pub grads: DeltaNetGrads,
+}
+
+impl DeltaNet {
+    pub fn new(d_in: usize, d_head: usize) -> Self {
+        Self {
+            d_in,
+            d_head,
+
+            w_qkv: f::xavier_normal((d_in, 3 * d_head)),
+            b_qkv: Array1::zeros(3 * d_head),
+            w_beta: f::xavier_normal((d_in, 1)),
+            b_beta: Array1::zeros(1),
+            w_o: f::xavier_normal((d_head, d_in)),
+            b_o: Array1::zeros(d_in),
+
+            cache: DeltaNetCache::default(),
+            grads: DeltaNetGrads::default(),
+        }
+    }
+
+    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        let (batch_size, seq_len, features) = x.dim();
+
+        let x_2d = x
+            .into_shape_clone((batch_size * seq_len, features))
+            .unwrap();
+
+        let qkv_2d = x_2d.dot(&self.w_qkv) + &self.b_qkv;
+        let qkv = qkv_2d
+            .into_shape_clone((batch_size, seq_len, 3, self.d_head))
+            .unwrap()
+            .permuted_axes([2, 0, 1, 3])
+            .to_owned();
+
+        let q = qkv.slice(s![0, .., .., ..]);
+        let k = qkv.slice(s![1, .., .., ..]);
+        let v = qkv.slice(s![2, .., .., ..]);
+
+        let beta_preactivations = x_2d.dot(&self.w_beta) + &self.b_beta;
+        let beta_2d = f::sigmoid(&beta_preactivations);
+        let beta = beta_2d.into_shape_clone((batch_size, seq_len, 1)).unwrap();
+
+        if grad {
+            self.cache.x_2d = x_2d;
+            self.cache.q = q.to_owned();
+            self.cache.k = k.to_owned();
+            self.cache.v = v.to_owned();
+            self.cache.beta_preactivations = beta_preactivations;
+            self.cache.beta = beta.clone();
+            self.cache.addresses_forget =
+                Array4::zeros((seq_len, batch_size, self.d_head, self.d_head));
+            self.cache.addresses_insert =
+                Array4::zeros((seq_len, batch_size, self.d_head, self.d_head));
+            self.cache.states = Array4::zeros((seq_len + 1, batch_size, self.d_head, self.d_head));
+        }
+
+        let mut state = Array3::zeros((batch_size, self.d_head, self.d_head));
+        let mut attn = Array3::zeros((batch_size, seq_len, self.d_head));
+
+        for t in 0..seq_len {
+            let q_t = q.slice(s![.., t, ..]);
+            let k_t = k.slice(s![.., t, ..]); // (B, d_k)
+            let v_t = v.slice(s![.., t, ..]); // (B, d_v)
+            let beta_t = beta.slice(s![.., t, ..]).insert_axis(Axis(2));
+
+            let address_forget = &k_t.insert_axis(Axis(1)) * &k_t.insert_axis(Axis(2));
+            let forget = Array3::<f64>::ones(address_forget.dim()) - &beta_t * &address_forget;
+
+            let address_insert = &v_t.insert_axis(Axis(1)) * &k_t.insert_axis(Axis(2));
+            let insert = &beta_t * &address_insert;
+
+            state = &state * &forget + &insert;
+
+            // (B, d_q) -> (B, d_q, 1)
+            let q_t_inner = q_t.insert_axis(Axis(2));
+            let attn_t = (&q_t_inner * &state).sum_axis(Axis(1));
+
+            attn.slice_mut(s![.., t, ..]).assign(&attn_t);
+
+            if grad {
+                self.cache
+                    .addresses_forget
+                    .slice_mut(s![t, .., .., ..])
+                    .assign(&address_forget);
+                self.cache
+                    .addresses_insert
+                    .slice_mut(s![t, .., .., ..])
+                    .assign(&address_insert);
+                self.cache
+                    .states
+                    .slice_mut(s![t + 1, .., .., ..])
+                    .assign(&state);
+            }
+        }
+
+        let attn_2d = attn
+            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .unwrap();
+        let output_2d = attn_2d.dot(&self.w_o) + &self.b_o;
+        let output = output_2d
+            .into_shape_clone((batch_size, seq_len, self.d_in))
+            .unwrap();
+
+        if grad {
+            self.cache.attn_2d = attn_2d;
+        }
+
+        output
+    }
+
+    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        let (batch_size, seq_len, features) = d_loss.dim();
+        let (_, _, d_k, d_v) = self.cache.states.dim();
+
+        if self.grads.d_w_o.dim() == (0, 0) {
+            self.grads.d_w_o = Array2::zeros(self.w_o.dim())
+        }
+
+        if self.grads.d_b_o.dim() == 0 {
+            self.grads.d_b_o = Array1::zeros(self.b_o.dim())
+        }
+
+        if self.grads.d_w_beta.dim() == (0, 0) {
+            self.grads.d_w_beta = Array2::zeros(self.w_beta.dim());
+        }
+
+        if self.grads.d_b_beta.dim() == 0 {
+            self.grads.d_b_beta = Array1::zeros(self.b_beta.dim());
+        }
+
+        if self.grads.d_w_qkv.dim() == (0, 0) {
+            self.grads.d_w_qkv = Array2::zeros(self.w_qkv.dim());
+        }
+
+        if self.grads.d_b_qkv.dim() == 0 {
+            self.grads.d_b_qkv = Array1::zeros(self.b_qkv.dim());
+        }
+
+        let d_loss_2d = d_loss
+            .into_shape_clone((batch_size * seq_len, features))
+            .unwrap();
+        self.grads.d_w_o += &(self.cache.attn_2d.t().dot(&d_loss_2d));
+        self.grads.d_b_o += &d_loss_2d.sum_axis(Axis(0));
+
+        let d_loss_2d = d_loss_2d.dot(&self.w_o.t());
+        let d_loss = d_loss_2d
+            .into_shape_clone((batch_size, seq_len, self.d_head))
+            .unwrap();
+
+        let mut d_loss_q = Array3::zeros((batch_size, seq_len, self.d_head));
+        let mut d_loss_k = Array3::zeros((batch_size, seq_len, d_k));
+        let mut d_loss_v = Array3::zeros((batch_size, seq_len, d_v));
+        let mut d_loss_beta = Array3::zeros((batch_size, seq_len, 1));
+
+        let mut d_resid = Array3::zeros((batch_size, d_k, d_v));
+
+        for t in (0..seq_len).rev() {
+            let d_loss_t = d_loss.slice(s![.., t, ..]); // (B, d_v)
+            let state_prev = self.cache.states.slice(s![t, .., .., ..]);
+            let state_t = self.cache.states.slice(s![t + 1, .., .., ..]); // (B, d_k, d_v)
+            let q_t = self.cache.q.slice(s![.., t, ..]); // (B, d_q)
+            let k_t = self.cache.k.slice(s![.., t, ..]); // (B, d_k)
+            let v_t = self.cache.v.slice(s![.., t, ..]); // (B, d_v)
+            let beta_t = self.cache.beta.slice(s![.., t, ..]).insert_axis(Axis(2)); // (B, 1, 1)
+            let address_forget_t = self.cache.addresses_forget.slice(s![t, .., .., ..]);
+            let address_insert_t = self.cache.addresses_insert.slice(s![t, .., .., ..]);
+
+            let beta_t = beta_t.broadcast(state_prev.dim()).unwrap();
+
+            let d_q = (&state_t * &d_loss_t.insert_axis(Axis(1))).sum_axis(Axis(2));
+            d_loss_q.slice_mut(s![.., t, ..]).assign(&d_q);
+
+            let d_state = &q_t.insert_axis(Axis(2)) * &d_loss_t.insert_axis(Axis(1)) + &d_resid;
+
+            // S = S_prev * (1. - beta * k * k.T) + beta * (v * k.T)
+
+            // get d_beta
+            let d_beta_forget = -1. * &state_prev * &address_forget_t * &d_state;
+            let d_beta_insert = &address_insert_t * &d_state;
+            let d_beta = &d_beta_forget + &d_beta_insert;
+            let d_beta = d_beta
+                .sum_axis(Axis(2))
+                .sum_axis(Axis(1))
+                .insert_axis(Axis(1));
+
+            d_loss_beta.slice_mut(s![.., t, ..]).assign(&d_beta);
+
+            // get d_k
+            let d_address_forget = -1. * &beta_t * &state_prev * &d_state;
+            let d_k_forget_k = (&d_address_forget * &k_t.insert_axis(Axis(1))).sum_axis(Axis(2));
+            let d_k_forget_k_t = (&d_address_forget * &k_t.insert_axis(Axis(2))).sum_axis(Axis(1));
+            let d_k_forget = &d_k_forget_k + &d_k_forget_k_t;
+
+            let d_address_insert = &beta_t * &d_state;
+            let d_k_insert = (&d_address_insert * &v_t.insert_axis(Axis(1))).sum_axis(Axis(2));
+
+            let d_k = &d_k_forget + &d_k_insert;
+
+            d_loss_k.slice_mut(s![.., t, ..]).assign(&d_k);
+
+            // get d_v
+            let d_v = (&d_address_insert * &k_t.insert_axis(Axis(2))).sum_axis(Axis(1));
+
+            d_loss_v.slice_mut(s![.., t, ..]).assign(&d_v);
+
+            // get d_s_prev
+            let d_state_prev = &d_state - &d_state * &beta_t * &address_forget_t;
+            d_resid = d_state_prev;
+        }
+
+        // update beta weights
+
+        let d_loss_beta_2d = d_loss_beta
+            .into_shape_clone((batch_size * seq_len, 1))
+            .unwrap();
+        let d_beta_dz = &d_loss_beta_2d * f::d_sigmoid(&self.cache.beta_preactivations);
+
+        self.grads.d_w_beta += &(self.cache.x_2d.t().dot(&d_beta_dz));
+        self.grads.d_b_beta += &(d_beta_dz.sum_axis(Axis(0)));
+
+        let d_x_beta = d_beta_dz.dot(&self.w_beta.t());
+
+        // (3, B, S, D) -> (B, S, 3, D)
+        let d_loss_qkv = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
+            .permuted_axes([1, 2, 0, 3])
+            .to_owned()
+            .into_shape_clone((batch_size * seq_len, 3 * self.d_head))
+            .unwrap();
+
+        self.grads.d_w_qkv += &(self.cache.x_2d.t().dot(&d_loss_qkv));
+        self.grads.d_b_qkv += &d_loss_qkv.sum_axis(Axis(0));
+
+        let d_x_2d = d_loss_qkv.dot(&self.w_qkv.t());
+
+        let d_x_2d = d_x_2d + d_x_beta;
+
+        let d_x = d_x_2d
+            .into_shape_clone((batch_size, seq_len, self.d_in))
+            .unwrap();
+
+        d_x
+    }
+}
+
+impl ToParams for DeltaNet {
+    fn params(&mut self) -> Vec<Param> {
+        vec![
+            Param::new(&mut self.w_qkv).with_grad(&mut self.grads.d_w_qkv),
+            Param::new(&mut self.b_qkv).with_grad(&mut self.grads.d_b_qkv),
+            Param::new(&mut self.w_beta).with_grad(&mut self.grads.d_w_beta),
+            Param::new(&mut self.b_beta).with_grad(&mut self.grads.d_b_beta),
+            Param::new(&mut self.w_o).with_grad(&mut self.grads.d_w_o),
+            Param::new(&mut self.b_o).with_grad(&mut self.grads.d_b_o),
+        ]
+    }
+}
+
+impl ToIntermediates for DeltaNet {
+    fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
+        vec![
+            &mut self.cache.x_2d,
+            &mut self.cache.q,
+            &mut self.cache.k,
+            &mut self.cache.v,
+            &mut self.cache.beta_preactivations,
+            &mut self.cache.beta,
+            &mut self.cache.addresses_forget,
+            &mut self.cache.addresses_insert,
+            &mut self.cache.states,
+            &mut self.cache.attn_2d,
+        ]
+    }
+}

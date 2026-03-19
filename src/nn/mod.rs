@@ -1,9 +1,9 @@
 pub mod attention;
 pub mod conv2d;
+pub mod delta_net;
 pub mod esn;
 pub mod experimental;
 pub mod ffn;
-// pub mod gla;
 pub mod gated_linear_transformer;
 pub mod linear_attention;
 pub mod linear_ssm;
@@ -16,6 +16,7 @@ pub mod transformer;
 
 pub use attention::*;
 pub use conv2d::*;
+pub use delta_net::*;
 pub use esn::*;
 pub use ffn::*;
 // pub use gla::*;
