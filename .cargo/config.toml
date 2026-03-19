@@ -1,0 +1,5 @@
+[target.aarch64-apple-darwin]
+rustflags = ["-l", "framework=Accelerate"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-l", "framework=Accelerate"]
