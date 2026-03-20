@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Array4, Axis, s, stack};
+use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -11,13 +11,13 @@ use crate::{
 // TODO change w/b_beta to w/b_alphabeta and use alpha for global decay
 
 #[derive(Default, Debug, Clone)]
-pub struct DeltaNetCache {
+pub struct GatedDeltaNetCache {
     pub x_2d: Array2<f64>,
     pub q: Array3<f64>,
     pub k: Array3<f64>,
     pub v: Array3<f64>,
-    pub beta_preactivations: Array2<f64>,
-    pub beta: Array3<f64>,
+    pub ab_preactivations: Array2<f64>,
+    pub ab: Array3<f64>,
     pub rs: Array3<f64>,
     pub updates: Array4<f64>,
     pub states: Array4<f64>,
@@ -25,34 +25,34 @@ pub struct DeltaNetCache {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct DeltaNetGrads {
+pub struct GatedDeltaNetGrads {
     pub d_w_qkv: Array2<f64>,
     pub d_b_qkv: Array1<f64>,
-    pub d_w_beta: Array2<f64>,
-    pub d_b_beta: Array1<f64>,
+    pub d_w_ab: Array2<f64>,
+    pub d_b_ab: Array1<f64>,
     pub d_w_o: Array2<f64>,
     pub d_b_o: Array1<f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DeltaNet {
+pub struct GatedDeltaNet {
     pub d_in: usize,
     pub d_head: usize,
 
     pub w_qkv: Array2<f64>,
     pub b_qkv: Array1<f64>,
-    pub w_beta: Array2<f64>,
-    pub b_beta: Array1<f64>,
+    pub w_ab: Array2<f64>,
+    pub b_ab: Array1<f64>,
     pub w_o: Array2<f64>,
     pub b_o: Array1<f64>,
 
     #[serde(skip)]
-    pub cache: DeltaNetCache,
+    pub cache: GatedDeltaNetCache,
     #[serde(skip)]
-    pub grads: DeltaNetGrads,
+    pub grads: GatedDeltaNetGrads,
 }
 
-impl DeltaNet {
+impl GatedDeltaNet {
     pub fn new(d_in: usize, d_head: usize) -> Self {
         Self {
             d_in,
@@ -60,13 +60,13 @@ impl DeltaNet {
 
             w_qkv: f::xavier_normal((d_in, 3 * d_head)),
             b_qkv: Array1::zeros(3 * d_head),
-            w_beta: f::xavier_normal((d_in, 1)),
-            b_beta: Array1::zeros(1),
+            w_ab: f::xavier_normal((d_in, 2)),
+            b_ab: Array1::zeros(2),
             w_o: f::xavier_normal((d_head, d_in)),
             b_o: Array1::zeros(d_in),
 
-            cache: DeltaNetCache::default(),
-            grads: DeltaNetGrads::default(),
+            cache: GatedDeltaNetCache::default(),
+            grads: GatedDeltaNetGrads::default(),
         }
     }
 
@@ -88,17 +88,17 @@ impl DeltaNet {
         let k = qkv.slice(s![1, .., .., ..]);
         let v = qkv.slice(s![2, .., .., ..]);
 
-        let beta_preactivations = x_2d.dot(&self.w_beta) + &self.b_beta;
-        let beta_2d = f::sigmoid(&beta_preactivations);
-        let beta = beta_2d.into_shape_clone((batch_size, seq_len, 1)).unwrap();
+        let ab_preactivations = x_2d.dot(&self.w_ab) + &self.b_ab;
+        let ab_2d = f::sigmoid(&ab_preactivations);
+        let ab = ab_2d.into_shape_clone((batch_size, seq_len, 2)).unwrap();
 
         if grad {
             self.cache.x_2d = x_2d;
             self.cache.q = q.to_owned();
             self.cache.k = k.to_owned();
             self.cache.v = v.to_owned();
-            self.cache.beta_preactivations = beta_preactivations;
-            self.cache.beta = beta.clone();
+            self.cache.ab_preactivations = ab_preactivations;
+            self.cache.ab = ab.clone();
             self.cache.rs = Array3::zeros((seq_len, batch_size, self.d_head));
             self.cache.updates = Array4::zeros((seq_len, batch_size, self.d_head, self.d_head));
             self.cache.states = Array4::zeros((seq_len + 1, batch_size, self.d_head, self.d_head));
@@ -111,15 +111,17 @@ impl DeltaNet {
             let q_t = q.slice(s![.., t, ..]);
             let k_t = k.slice(s![.., t, ..]); // (B, d_k)
             let v_t = v.slice(s![.., t, ..]); // (B, d_v)
-            let beta_t = beta.slice(s![.., t, ..]).insert_axis(Axis(2));
+            let alpha_t = ab.slice(s![.., t, 0..1]).insert_axis(Axis(2));
+            let beta_t = ab.slice(s![.., t, 1..2]).insert_axis(Axis(2));
 
+            let alpha_t = alpha_t.broadcast(state.dim()).unwrap();
             let beta_t = beta_t.broadcast(state.dim()).unwrap();
 
             let r = (&state * &k_t.insert_axis(Axis(2))).sum_axis(Axis(1));
             let error = &v_t - &r;
             let update = &k_t.insert_axis(Axis(2)) * &error.insert_axis(Axis(1));
 
-            state = &state + &beta_t * &update;
+            state = &alpha_t * &state + &beta_t * &update;
 
             // (B, d_q) -> (B, d_q, 1)
             let q_t_inner = q_t.insert_axis(Axis(2));
@@ -167,12 +169,12 @@ impl DeltaNet {
             self.grads.d_b_o = Array1::zeros(self.b_o.dim())
         }
 
-        if self.grads.d_w_beta.dim() == (0, 0) {
-            self.grads.d_w_beta = Array2::zeros(self.w_beta.dim());
+        if self.grads.d_w_ab.dim() == (0, 0) {
+            self.grads.d_w_ab = Array2::zeros(self.w_ab.dim());
         }
 
-        if self.grads.d_b_beta.dim() == 0 {
-            self.grads.d_b_beta = Array1::zeros(self.b_beta.dim());
+        if self.grads.d_b_ab.dim() == 0 {
+            self.grads.d_b_ab = Array1::zeros(self.b_ab.dim());
         }
 
         if self.grads.d_w_qkv.dim() == (0, 0) {
@@ -198,6 +200,7 @@ impl DeltaNet {
         let mut d_loss_k = Array3::zeros((batch_size, seq_len, d_k));
         let mut d_loss_v = Array3::zeros((batch_size, seq_len, d_v));
         let mut d_loss_beta = Array3::zeros((batch_size, seq_len, 1));
+        let mut d_loss_alpha = Array3::zeros((batch_size, seq_len, 1));
 
         let mut d_resid = Array3::zeros((batch_size, d_k, d_v));
 
@@ -208,10 +211,13 @@ impl DeltaNet {
             let q_t = self.cache.q.slice(s![.., t, ..]); // (B, d_q)
             let k_t = self.cache.k.slice(s![.., t, ..]); // (B, d_k)
             let v_t = self.cache.v.slice(s![.., t, ..]); // (B, d_v)
-            let beta_t = self.cache.beta.slice(s![.., t, ..]).insert_axis(Axis(2)); // (B, 1, 1)
+            let alpha_t = self.cache.ab.slice(s![.., t, 0..1]).insert_axis(Axis(2)); // (B, 1, 1)
+            let beta_t = self.cache.ab.slice(s![.., t, 1..2]).insert_axis(Axis(2)); // (B, 1, 1)
+
             let r_t = self.cache.rs.slice(s![t, .., ..]);
             let update_t = self.cache.updates.slice(s![t, .., .., ..]);
 
+            let alpha_t = alpha_t.broadcast(state_prev.dim()).unwrap();
             let beta_t = beta_t.broadcast(state_prev.dim()).unwrap();
 
             let d_q = (&state_t * &d_loss_t.insert_axis(Axis(1))).sum_axis(Axis(2));
@@ -255,23 +261,33 @@ impl DeltaNet {
             let d_k = &d_k_r + &d_k_update;
             d_loss_k.slice_mut(s![.., t, ..]).assign(&d_k);
 
+            // get d_alpha
+            let d_alpha = &d_state * &state_prev;
+            let d_alpha = d_alpha
+                .sum_axis(Axis(2))
+                .sum_axis(Axis(1))
+                .insert_axis(Axis(1));
+            d_loss_alpha.slice_mut(s![.., t, ..]).assign(&d_alpha);
+
             // combine gradients for state
-            let d_state_prev = &d_state + &d_state_prev_r;
+            let d_state_prev = &alpha_t * &d_state + &d_state_prev_r;
 
             d_resid = d_state_prev;
         }
 
         // update beta weights
 
-        let d_loss_beta_2d = d_loss_beta
-            .into_shape_clone((batch_size * seq_len, 1))
+        let d_loss_ab = concatenate![Axis(2), d_loss_alpha.view(), d_loss_beta.view()];
+
+        let d_loss_ab_2d = d_loss_ab
+            .into_shape_clone((batch_size * seq_len, 2))
             .unwrap();
-        let d_beta_dz = &d_loss_beta_2d * f::d_sigmoid(&self.cache.beta_preactivations);
+        let d_ab_dz = &d_loss_ab_2d * f::d_sigmoid(&self.cache.ab_preactivations);
 
-        self.grads.d_w_beta += &(self.cache.x_2d.t().dot(&d_beta_dz));
-        self.grads.d_b_beta += &(d_beta_dz.sum_axis(Axis(0)));
+        self.grads.d_w_ab += &(self.cache.x_2d.t().dot(&d_ab_dz));
+        self.grads.d_b_ab += &(d_ab_dz.sum_axis(Axis(0)));
 
-        let d_x_beta = d_beta_dz.dot(&self.w_beta.t());
+        let d_x_beta = d_ab_dz.dot(&self.w_ab.t());
 
         // (3, B, S, D) -> (B, S, 3, D)
         let d_loss_qkv = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
@@ -295,28 +311,28 @@ impl DeltaNet {
     }
 }
 
-impl ToParams for DeltaNet {
+impl ToParams for GatedDeltaNet {
     fn params(&mut self) -> Vec<Param> {
         vec![
             Param::new(&mut self.w_qkv).with_grad(&mut self.grads.d_w_qkv),
             Param::new(&mut self.b_qkv).with_grad(&mut self.grads.d_b_qkv),
-            Param::new(&mut self.w_beta).with_grad(&mut self.grads.d_w_beta),
-            Param::new(&mut self.b_beta).with_grad(&mut self.grads.d_b_beta),
+            Param::new(&mut self.w_ab).with_grad(&mut self.grads.d_w_ab),
+            Param::new(&mut self.b_ab).with_grad(&mut self.grads.d_b_ab),
             Param::new(&mut self.w_o).with_grad(&mut self.grads.d_w_o),
             Param::new(&mut self.b_o).with_grad(&mut self.grads.d_b_o),
         ]
     }
 }
 
-impl ToIntermediates for DeltaNet {
+impl ToIntermediates for GatedDeltaNet {
     fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
         vec![
             &mut self.cache.x_2d,
             &mut self.cache.q,
             &mut self.cache.k,
             &mut self.cache.v,
-            &mut self.cache.beta_preactivations,
-            &mut self.cache.beta,
+            &mut self.cache.ab_preactivations,
+            &mut self.cache.ab,
             &mut self.cache.rs,
             &mut self.cache.updates,
             &mut self.cache.states,

@@ -139,6 +139,23 @@ pub fn cross_entropy_loss(probs: &Array3<f64>, targets: &Array3<f64>) -> f64 {
     loss
 }
 
+// NORM
+
+pub fn l2(x: &Array2<f64>) -> Array1<f64> {
+    x.pow2().sum_axis(Axis(1)).sqrt()
+}
+
+pub fn l2_norm(x: &Array2<f64>) -> Array2<f64> {
+    x / l2(&x).insert_axis(Axis(1))
+}
+
+pub fn d_l2_norm(x: &Array2<f64>, grad: &Array2<f64>) -> Array2<f64> {
+    let norm = l2(x).insert_axis(Axis(1));
+    let x_hat = x / &norm;
+    let dot = (&x_hat * grad).sum_axis(Axis(1)).insert_axis(Axis(1));
+    (grad - &x_hat * dot) / &norm
+}
+
 // MISC
 
 pub fn linear_norm(x: &Array2<f64>) -> Array2<f64> {
@@ -196,14 +213,6 @@ pub fn log_softmax(x: Array2<f64>) -> Array2<f64> {
         .insert_axis(Axis(1));
 
     &d - sums.ln()
-}
-
-pub fn l2(v: &Array1<f64>) -> f64 {
-    v.pow2().sum().sqrt()
-}
-
-pub fn l2_norm(v: &Array1<f64>) -> Array1<f64> {
-    v / l2(v)
 }
 
 pub fn clip_grad(mut grad: Array2<f64>, clip: f64) -> Array2<f64> {
@@ -276,7 +285,7 @@ pub fn calculate_spectral_radius(w_r: &Array2<f64>, n: usize) -> f64 {
     let mut radius = 0.;
     for _ in 0..n {
         h = h.dot(w_r);
-        radius = l2(&h.row(0).to_owned());
+        radius = l2(&h)[[0]];
         h /= radius;
     }
 
