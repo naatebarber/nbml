@@ -132,17 +132,102 @@ pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
 
 // LOSSES
 
-pub fn cross_entropy_loss(probs: &Array3<f64>, targets: &Array3<f64>) -> f64 {
+pub fn soft_cross_entropy_loss(probs: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64>) {
     let log_probs = probs.mapv(|p| p.max(1e-10).ln());
-    let loss = -(targets * &log_probs).sum() / (probs.dim().0 * probs.dim().1) as f64;
+    let loss = -(targets * &log_probs).sum() / probs.dim().0 as f64;
 
-    loss
+    let d_loss = probs - targets;
+
+    (loss, d_loss)
+}
+
+pub fn batch_soft_cross_entropy_loss(
+    probs: Array3<f64>,
+    targets: Array3<f64>,
+) -> (f64, Array3<f64>) {
+    let (b, s, d) = probs.dim();
+    let probs_2d = probs.into_shape_clone((b * s, d)).unwrap();
+    let targets_2d = targets.into_shape_clone((b * s, d)).unwrap();
+    let (loss, d_loss_2d) = soft_cross_entropy_loss(&probs_2d, &targets_2d);
+    let d_loss = d_loss_2d.into_shape_clone((b, s, d)).unwrap();
+    (loss, d_loss)
+}
+
+pub fn cross_entropy_loss(probs: &Array2<f64>, classes: &Array1<usize>) -> (f64, Array2<f64>) {
+    let n = probs.dim().0;
+    let mut loss = 0.0;
+    let mut d_loss = probs.clone();
+
+    for i in 0..n {
+        loss -= probs[[i, classes[i]]].max(1e-10).ln();
+        d_loss[[i, classes[i]]] -= 1.0;
+    }
+
+    loss /= n as f64;
+    let d_loss = d_loss / n as f64;
+
+    (loss, d_loss)
+}
+
+pub fn batch_cross_entropy_loss(probs: Array3<f64>, classes: Array2<usize>) -> (f64, Array3<f64>) {
+    let (b, s, d) = probs.dim();
+    let probs_2d = probs.into_shape_clone((b * s, d)).unwrap();
+    let classes_1d = classes.into_shape_clone((b * s,)).unwrap();
+    let (loss, d_loss_2d) = cross_entropy_loss(&probs_2d, &classes_1d);
+    let d_loss = d_loss_2d.into_shape_clone((b, s, d)).unwrap();
+    (loss, d_loss)
+}
+
+pub fn bce_loss(sigmoid_probs: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64>) {
+    let eps = 1e-10;
+    let n = sigmoid_probs.len() as f64;
+
+    let loss = -(targets * &sigmoid_probs.mapv(|p| p.max(eps).ln())
+        + (1.0 - targets) * &sigmoid_probs.mapv(|p| (1.0 - p).max(eps).ln()))
+        .sum()
+        / n;
+
+    let d_loss = (sigmoid_probs - targets)
+        / &(sigmoid_probs * &(1.0 - sigmoid_probs)).mapv(|v| v.max(eps))
+        / n;
+
+    (loss, d_loss)
+}
+
+pub fn batch_bce_loss(sigmoid_probs: Array3<f64>, targets: Array3<f64>) -> (f64, Array3<f64>) {
+    let (b, s, d) = sigmoid_probs.dim();
+    let sigmoid_probs_2d = sigmoid_probs.into_shape_clone((b * s, d)).unwrap();
+    let targets_2d = targets.into_shape_clone((b * s, d)).unwrap();
+    let (loss, d_loss_2d) = bce_loss(&sigmoid_probs_2d, &targets_2d);
+    let d_loss = d_loss_2d.into_shape_clone((b, s, d)).unwrap();
+    (loss, d_loss)
+}
+
+pub fn mse_loss(logits: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64>) {
+    let diff = logits - targets;
+    let n = logits.len() as f64;
+
+    let loss = diff.pow2().mean().unwrap();
+
+    let d_loss = 2. * &diff / n;
+
+    (loss, d_loss)
+}
+
+pub fn batch_mse_loss(logits: Array3<f64>, targets: Array3<f64>) -> (f64, Array3<f64>) {
+    let (b, s, d) = logits.dim();
+    let logits_2d = logits.into_shape_clone((b * s, d)).unwrap();
+    let targets_2d = targets.into_shape_clone((b * s, d)).unwrap();
+    let (loss, d_loss_2d) = mse_loss(&logits_2d, &targets_2d);
+    let d_loss = d_loss_2d.into_shape_clone((b, s, d)).unwrap();
+    (loss, d_loss)
 }
 
 // NORM
 
 pub fn l2(x: &Array2<f64>) -> Array1<f64> {
-    x.pow2().sum_axis(Axis(1)).sqrt()
+    let eps = 1e-12;
+    x.pow2().sum_axis(Axis(1)).sqrt().mapv(|x| x.max(eps))
 }
 
 pub fn l2_norm(x: &Array2<f64>) -> Array2<f64> {

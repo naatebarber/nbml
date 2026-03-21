@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "nbml"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "bincode",
  "blas-src",

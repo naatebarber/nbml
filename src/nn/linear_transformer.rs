@@ -3,23 +3,85 @@ use serde::{Deserialize, Serialize};
 
 use crate::f::Activation;
 use crate::layers::LayerNorm;
-use crate::nn::{FFN, LinearAttention};
+use crate::nn::{DeltaNet, FFN, GatedDeltaNet, GatedLinearAttention, LinearAttention};
 use crate::optim::{Param, ToIntermediates, ToParams};
 
+pub trait LinearAttentionLike: ToParams + ToIntermediates {
+    fn new(d_in: usize, d_head: usize) -> Self;
+    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64>;
+    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64>;
+}
+
+impl LinearAttentionLike for LinearAttention {
+    fn new(d_in: usize, d_head: usize) -> Self {
+        LinearAttention::new(d_in, d_head)
+    }
+
+    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        self.forward(x, grad)
+    }
+
+    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        self.backward(d_loss)
+    }
+}
+
+impl LinearAttentionLike for GatedLinearAttention {
+    fn new(d_in: usize, d_head: usize) -> Self {
+        GatedLinearAttention::new(d_in, d_head)
+    }
+
+    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        self.forward(x, grad)
+    }
+
+    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        self.backward(d_loss)
+    }
+}
+
+impl LinearAttentionLike for DeltaNet {
+    fn new(d_in: usize, d_head: usize) -> Self {
+        DeltaNet::new(d_in, d_head)
+    }
+
+    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        self.forward(x, grad)
+    }
+
+    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        self.backward(d_loss)
+    }
+}
+
+impl LinearAttentionLike for GatedDeltaNet {
+    fn new(d_in: usize, d_head: usize) -> Self {
+        GatedDeltaNet::new(d_in, d_head)
+    }
+
+    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+        self.forward(x, grad)
+    }
+
+    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+        self.backward(d_loss)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LinearTransformer {
+pub struct LinearTransformerBase<A: LinearAttentionLike> {
     pub d_in: usize,
-    pub attn: LinearAttention,
+    pub attn: A,
     pub norm_attn: LayerNorm,
     pub feed_forward: FFN,
     pub norm_feed_forward: LayerNorm,
 }
 
-impl LinearTransformer {
+impl<A: LinearAttentionLike> LinearTransformerBase<A> {
     pub fn new(d_in: usize, d_head: usize) -> Self {
         Self {
             d_in,
-            attn: LinearAttention::new(d_in, d_head),
+            attn: A::new(d_in, d_head),
             norm_attn: LayerNorm::new(d_in),
             feed_forward: FFN::new(vec![
                 (d_in, 4 * d_in, Activation::Relu),
@@ -70,7 +132,7 @@ impl LinearTransformer {
     }
 }
 
-impl ToParams for LinearTransformer {
+impl<A: LinearAttentionLike> ToParams for LinearTransformerBase<A> {
     fn params(&mut self) -> Vec<Param> {
         let mut params = vec![];
 
@@ -83,7 +145,7 @@ impl ToParams for LinearTransformer {
     }
 }
 
-impl ToIntermediates for LinearTransformer {
+impl<A: LinearAttentionLike> ToIntermediates for LinearTransformerBase<A> {
     fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
         let mut intermediates = vec![];
 
@@ -95,3 +157,8 @@ impl ToIntermediates for LinearTransformer {
         intermediates
     }
 }
+
+pub type LinearTransformer = LinearTransformerBase<LinearAttention>;
+pub type GlaTransformer = LinearTransformerBase<GatedLinearAttention>;
+pub type DeltaNetTransformer = LinearTransformerBase<DeltaNet>;
+pub type GdnTransformer = LinearTransformerBase<GatedDeltaNet>;

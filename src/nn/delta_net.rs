@@ -13,6 +13,8 @@ use crate::{
 #[derive(Default, Debug, Clone)]
 pub struct DeltaNetCache {
     pub x_2d: Array2<f64>,
+    pub q_preactivations: Array2<f64>,
+    pub k_preactivations: Array2<f64>,
     pub q: Array3<f64>,
     pub k: Array3<f64>,
     pub v: Array3<f64>,
@@ -84,9 +86,23 @@ impl DeltaNet {
             .permuted_axes([2, 0, 1, 3])
             .to_owned();
 
-        let q = qkv.slice(s![0, .., .., ..]);
-        let k = qkv.slice(s![1, .., .., ..]);
+        let q_preactivations = qkv.slice(s![0, .., .., ..]).to_owned();
+        let k_preactivations = qkv.slice(s![1, .., .., ..]).to_owned();
         let v = qkv.slice(s![2, .., .., ..]);
+
+        let q_preactivations_2d = q_preactivations
+            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .unwrap();
+        let k_preactivations_2d = k_preactivations
+            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .unwrap();
+
+        let q = f::l2_norm(&q_preactivations_2d)
+            .into_shape_clone((batch_size, seq_len, self.d_head))
+            .unwrap();
+        let k = f::l2_norm(&k_preactivations_2d)
+            .into_shape_clone((batch_size, seq_len, self.d_head))
+            .unwrap();
 
         let beta_preactivations = x_2d.dot(&self.w_beta) + &self.b_beta;
         let beta_2d = f::sigmoid(&beta_preactivations);
@@ -94,6 +110,8 @@ impl DeltaNet {
 
         if grad {
             self.cache.x_2d = x_2d;
+            self.cache.q_preactivations = q_preactivations_2d;
+            self.cache.k_preactivations = k_preactivations_2d;
             self.cache.q = q.to_owned();
             self.cache.k = k.to_owned();
             self.cache.v = v.to_owned();
@@ -272,6 +290,22 @@ impl DeltaNet {
         self.grads.d_b_beta += &(d_beta_dz.sum_axis(Axis(0)));
 
         let d_x_beta = d_beta_dz.dot(&self.w_beta.t());
+
+        // grad of norm on q and k
+
+        let d_q_2d = d_loss_q
+            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .unwrap();
+        let d_loss_q = f::d_l2_norm(&self.cache.q_preactivations, &d_q_2d)
+            .into_shape_clone((batch_size, seq_len, self.d_head))
+            .unwrap();
+
+        let d_k_2d = d_loss_k
+            .into_shape_clone((batch_size * seq_len, self.d_head))
+            .unwrap();
+        let d_loss_k = f::d_l2_norm(&self.cache.k_preactivations, &d_k_2d)
+            .into_shape_clone((batch_size, seq_len, self.d_head))
+            .unwrap();
 
         // (3, B, S, D) -> (B, S, 3, D)
         let d_loss_qkv = stack![Axis(0), d_loss_q.view(), d_loss_k.view(), d_loss_v.view()]
