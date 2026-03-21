@@ -58,14 +58,19 @@ for batch in training_data {
 - **`CrossAttention`**: Multi-head cross attention
 - **`LinearAttention`**: Linear self attention with recurrent matrix-valued state. Subquadratic alternative to softmax attention ([Katharopoulos et al., 2020](https://arxiv.org/abs/2006.16236))
 - **`GatedLinearAttention`**: Gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
+- **`DeltaNet`**: Linear attention with delta rule for error-corrected state updates ([Yang et al., 2024](https://arxiv.org/abs/2406.06484))
+- **`GatedDeltaNet`**: Gated delta network combining data-dependent gating with delta rule updates ([Yang et al., 2025](https://arxiv.org/abs/2412.06464))
 - **`Transformer`**: Transformer encoder/decoder block
 - **`LinearTransformer`**: Transformer block using linear self attention instead of softmax attention
-- **`GlaTransformer`**: Transformer block using gated linear attention. Similar to Mamba, RWKV, RetNet, etc.
+- **`GlaTransformer`**: Transformer block using gated linear attention.
+- **`DeltaNetTransformer`**: Transformer block using DeltaNet linear attention.
+- **`GdnTransformer`**: Transformer block using Gated DeltaNet linear attention.
 
 ### Layers (`nbml::layers`)
 
 Layers that are only useful as components of other modules:
 
+- **`L2Norm`**: L2 normalization
 - **`Linear`**: Affine transformation
 - **`Softmax`**: Row-wise softmax
 - **`LayerNorm`**: Layer normalization
