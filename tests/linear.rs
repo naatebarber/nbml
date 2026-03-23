@@ -1,5 +1,7 @@
 use nbml::{
-    f, layers::Linear, optim::{AdamW, Optimizer, ToParams}
+    f,
+    layers::Linear,
+    optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::Array2;
 use ndarray_rand::{RandomExt, rand_distr::Uniform};

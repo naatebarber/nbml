@@ -1,5 +1,7 @@
 use nbml::{
-    f, nn::LSTM, optim::{AdamW, Optimizer, ToIntermediates, ToParams}
+    f,
+    nn::LSTM,
+    optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
 use ndarray::{Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
@@ -35,7 +37,6 @@ fn intermediate_caching() {
         "intermediate caching process fucks with gradients"
     );
 }
-
 
 #[test]
 fn delta_net_gradient_check() {

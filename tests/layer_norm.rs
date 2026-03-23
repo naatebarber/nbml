@@ -1,7 +1,9 @@
 #![allow(deprecated)]
 
 use nbml::{
-    f, layers::LayerNorm, optim::{ToIntermediates, ToParams}
+    f,
+    layers::LayerNorm,
+    optim::{ToIntermediates, ToParams},
 };
 use ndarray::Array3;
 use ndarray_rand::{RandomExt, rand_distr::Uniform};

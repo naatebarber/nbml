@@ -41,7 +41,7 @@ pub fn associative_recall() {
     println!("d_model {d_model} seq_len {}", num_pairs * 2);
     let start = Instant::now();
 
-    let mut model = GatedLinearAttention::new(d_model, d_model / 4);
+    let mut model = GatedLinearAttention::new(d_model, d_model);
     let mut optim = AdamW::default().with(&mut model);
 
     for epoch in 0..500 {
@@ -90,7 +90,7 @@ pub fn associative_recall() {
 }
 
 pub fn main() {
-    println!("Running Associative Recall on Linear Self Attention");
+    println!("Running Associative Recall on Gated Linear Attention");
 
     associative_recall();
 }
