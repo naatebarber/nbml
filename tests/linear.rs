@@ -54,13 +54,13 @@ fn test_linear_gradients() {
 fn fixed_transform() {
     let mut lin = Linear::new(5, 5);
     let mut optim = AdamW::default().with(&mut lin);
-    optim.learning_rate = 1e-2;
+    optim.learning_rate = 2e-2;
 
     let start = Array2::random((1, 5), Uniform::new(0., 1.));
     let end = Array2::random((1, 5), Uniform::new(0., 1.));
 
     let mut loss = 0.;
-    for e in 0..100 {
+    for e in 0..200 {
         let prediction = lin.forward(start.clone(), true);
         loss = (&prediction - &end).pow2().mean().unwrap();
         println!("epoch={e} loss={loss}");
