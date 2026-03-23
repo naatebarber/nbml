@@ -1,6 +1,12 @@
 use ndarray::{Array, ArrayBase, ArrayD, DataMut, Dimension, IxDyn, RawArrayViewMut};
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::{error::Error, fmt::Debug, fs, path::PathBuf};
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TensorData {
+    data: Vec<f32>,
+    shape: Vec<usize>,
+}
 
 pub struct Param {
     pub target: Option<RawArrayViewMut<f32, IxDyn>>,
@@ -54,6 +60,49 @@ pub trait ToParams {
                 }
             }
         }
+    }
+
+    fn dump_model(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
+        let mut params = vec![];
+
+        unsafe {
+            self.params()
+                .iter_mut()
+                .filter_map(|param| param.target.take())
+                .for_each(|target| {
+                    let target_view = target.deref_into_view();
+                    let shape = target_view.shape().to_owned();
+                    let flat = target_view.flatten().to_vec();
+
+                    let data = TensorData { data: flat, shape };
+                    params.push(data);
+                });
+        }
+
+        fs::write(path.into(), bincode::serialize(&params)?)?;
+
+        Ok(())
+    }
+
+    fn load_model(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
+        let params: Vec<TensorData> = bincode::deserialize(&fs::read(path.into())?)?;
+
+        unsafe {
+            self.params()
+                .iter_mut()
+                .filter_map(|param| param.target.take())
+                .zip(params.into_iter())
+                .for_each(|(target, TensorData { data, shape })| {
+                    let mut target_view = target.deref_into_view_mut();
+                    let incoming = ArrayD::from_shape_vec(shape, data).unwrap();
+                    assert!(incoming.shape() == target_view.shape());
+
+                    target_view *= 0.;
+                    target_view += &incoming;
+                });
+        }
+
+        Ok(())
     }
 }
 
