@@ -2,9 +2,7 @@ use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f::Activation,
-    nn::{FFN, RNNReservoir},
-    optim::{Param, ToIntermediates, ToParams},
+    layers::Linear, nn::{RNNReservoir}, optim::{Param, ToIntermediates, ToParams}
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -14,7 +12,7 @@ pub struct ESN {
     pub d_out: usize,
 
     pub reservoir: RNNReservoir,
-    pub readout: FFN,
+    pub readout: Linear,
 }
 
 impl ESN {
@@ -25,13 +23,8 @@ impl ESN {
             d_out,
 
             reservoir: RNNReservoir::new(d_in, d_hidden),
-            readout: FFN::new(vec![(d_hidden, d_out, Activation::Identity)]),
+            readout: Linear::new(d_hidden, d_out),
         }
-    }
-
-    pub fn set_readout(&mut self, readout: FFN) {
-        self.d_out = readout.layers.last().unwrap().b.dim();
-        self.readout = readout;
     }
 
     pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {

@@ -1,9 +1,8 @@
 use ndarray::{Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
 
-use crate::f::Activation;
 use crate::layers::LayerNorm;
-use crate::nn::{FFN, SelfAttention};
+use crate::nn::{PositionwiseFFN, SelfAttention};
 use crate::optim::{Param, ToIntermediates, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -12,7 +11,7 @@ pub struct Transformer {
     pub d_in: usize,
     pub attn: SelfAttention,
     pub norm_attn: LayerNorm,
-    pub feed_forward: FFN,
+    pub feed_forward: PositionwiseFFN,
     pub norm_feed_forward: LayerNorm,
 }
 
@@ -23,10 +22,7 @@ impl Transformer {
             d_in,
             attn: SelfAttention::new(d_in, d_head, n_head),
             norm_attn: LayerNorm::new(d_in),
-            feed_forward: FFN::new(vec![
-                (d_in, 4 * d_in, Activation::Relu),
-                (4 * d_in, d_in, Activation::Identity),
-            ]),
+            feed_forward: PositionwiseFFN::new(d_in, 4 * d_in, d_in),
             norm_feed_forward: LayerNorm::new(d_in),
         }
     }

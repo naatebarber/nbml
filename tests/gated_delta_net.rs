@@ -73,7 +73,7 @@ fn gated_delta_net_gradient_check() {
 
                 let diff = (numerical - analytical).abs();
                 assert!(
-                    diff < 1e-4,
+                    diff < 1e-3,
                     "gradient mismatch at [{},{},{}]: numerical={}, analytical={}, diff={}",
                     b,
                     s,

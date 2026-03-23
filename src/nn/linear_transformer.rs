@@ -1,9 +1,8 @@
 use ndarray::Array3;
 use serde::{Deserialize, Serialize};
 
-use crate::f::Activation;
 use crate::layers::LayerNorm;
-use crate::nn::{DeltaNet, FFN, GatedDeltaNet, GatedLinearAttention, LinearAttention};
+use crate::nn::{DeltaNet, GatedDeltaNet, GatedLinearAttention, LinearAttention, PositionwiseFFN};
 use crate::optim::{Param, ToIntermediates, ToParams};
 
 pub trait LinearAttentionLike: ToParams + ToIntermediates {
@@ -73,7 +72,7 @@ pub struct LinearTransformerBase<A: LinearAttentionLike> {
     pub d_in: usize,
     pub attn: A,
     pub norm_attn: LayerNorm,
-    pub feed_forward: FFN,
+    pub feed_forward: PositionwiseFFN,
     pub norm_feed_forward: LayerNorm,
 }
 
@@ -83,10 +82,7 @@ impl<A: LinearAttentionLike> LinearTransformerBase<A> {
             d_in,
             attn: A::new(d_in, d_head),
             norm_attn: LayerNorm::new(d_in),
-            feed_forward: FFN::new(vec![
-                (d_in, 4 * d_in, Activation::Relu),
-                (4 * d_in, d_in, Activation::Identity),
-            ]),
+            feed_forward: PositionwiseFFN::new(d_in, 4 * d_in, d_in),
             norm_feed_forward: LayerNorm::new(d_in),
         }
     }

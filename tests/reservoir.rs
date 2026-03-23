@@ -1,6 +1,5 @@
 use nbml::{
-    f::Activation,
-    nn::{FFN, RNNReservoir, SNNReservoir},
+    nn::{PositionwiseFFN, RNNReservoir, SNNReservoir},
     optim::{AdamW, Optimizer, ToParams},
 };
 use ndarray::{Array1, Array2, Array3, Axis, concatenate, s};
@@ -15,7 +14,7 @@ fn rnn_reservoir_forward_and_step_same_value() {
     let d_out = 8;
 
     let reservoir = RNNReservoir::new(d_in, d_hidden);
-    let mut readout = FFN::new(vec![(d_hidden, d_out, Activation::Identity)]);
+    let mut readout = PositionwiseFFN::new(d_hidden, d_hidden, d_out);
 
     let x = Array3::random((1, 12, d_in), Uniform::new(0., 1.));
 
@@ -55,10 +54,7 @@ fn rnn_reservoir_sequence_pred() {
     let hidden = 2 * features;
 
     let reservoir = RNNReservoir::new(features, hidden);
-    let mut readout = FFN::new(vec![
-        (hidden, hidden, Activation::Relu),
-        (hidden, features, Activation::Identity),
-    ]);
+    let mut readout = PositionwiseFFN::new(hidden, hidden, features);
 
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 1e-2;
@@ -124,10 +120,7 @@ fn rnn_reservoir_sequence_pred_step() {
     let hidden = 20;
 
     let reservoir = RNNReservoir::new(features, hidden);
-    let mut readout = FFN::new(vec![
-        (hidden, hidden, Activation::Relu),
-        (hidden, features, Activation::Identity),
-    ]);
+    let mut readout = PositionwiseFFN::new(hidden, hidden, features);
 
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 1e-2;
@@ -205,7 +198,7 @@ fn snn_reservoir_temporal_classification() {
     reservoir.set_tau_range(0.05, 0.5);
     reservoir.set_threshold_range(0.3, 0.8);
 
-    let mut readout = FFN::new(vec![(hidden, 1, Activation::Sigmoid)]);
+    let mut readout = PositionwiseFFN::new(hidden, hidden, features);
 
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 5e-3;
@@ -294,7 +287,7 @@ fn snn_reservoir_heterogeneous_delta() {
     reservoir.set_tau_range(0.05, 0.5);
     reservoir.set_threshold_range(0.3, 0.8);
 
-    let mut readout = FFN::new(vec![(hidden, 1, Activation::Sigmoid)]);
+    let mut readout = PositionwiseFFN::new(hidden, hidden, features);
 
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 5e-3;

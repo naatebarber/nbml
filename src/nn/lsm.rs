@@ -2,27 +2,21 @@ use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f::Activation,
-    nn::{FFN, SNNReservoir},
-    optim::{ToIntermediates, ToParams},
+    f::{xavier_normal}, layers::Linear, nn::{SNNReservoir}, optim::{ToIntermediates, ToParams}
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LSM {
     pub reservoir: SNNReservoir,
-    pub readout: FFN,
+    pub readout: Linear,
 }
 
 impl LSM {
     pub fn new(d_in: usize, d_hidden: usize, d_out: usize) -> Self {
         Self {
             reservoir: SNNReservoir::new(d_in, d_hidden),
-            readout: FFN::new(vec![(d_hidden, d_out, Activation::Identity)]),
+            readout: Linear::new_with_init(d_hidden, d_out, xavier_normal)
         }
-    }
-
-    pub fn set_readout(&mut self, readout: FFN) {
-        self.readout = readout;
     }
 
     pub fn step(
