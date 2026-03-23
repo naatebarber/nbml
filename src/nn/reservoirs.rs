@@ -2,7 +2,10 @@ use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use serde::{Deserialize, Serialize};
 
-use crate::f;
+use crate::{
+    f,
+    optim::{Param, ToParams},
+};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RNNReservoir {
@@ -72,6 +75,16 @@ impl RNNReservoir {
     }
 }
 
+impl ToParams for RNNReservoir {
+    fn params(&mut self) -> Vec<Param> {
+        vec![
+            Param::new(&mut self.w_p),
+            Param::new(&mut self.w_r),
+            Param::new(&mut self.b),
+        ]
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct SNNReservoir {
     pub d_in: usize,
@@ -121,5 +134,16 @@ impl SNNReservoir {
 
         *state -= &p;
         *state += &p.dot(&self.w_r);
+    }
+}
+
+impl ToParams for SNNReservoir {
+    fn params(&mut self) -> Vec<crate::optim::Param> {
+        vec![
+            Param::new(&mut self.w_p),
+            Param::new(&mut self.taus),
+            Param::new(&mut self.thresholds),
+            Param::new(&mut self.w_r),
+        ]
     }
 }

@@ -1,7 +1,11 @@
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
-use crate::{f::{self, xavier_normal}, layers::Linear, optim::{ToIntermediates, ToParams}};
+use crate::{
+    f::{self, xavier_normal},
+    layers::Linear,
+    optim::{ToIntermediates, ToParams},
+};
 
 #[derive(Default, Debug, Clone)]
 pub struct PositionwiseFFNCache {

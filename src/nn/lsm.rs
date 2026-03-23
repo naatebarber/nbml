@@ -2,7 +2,10 @@ use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    f::{xavier_normal}, layers::Linear, nn::{SNNReservoir}, optim::{ToIntermediates, ToParams}
+    f::xavier_normal,
+    layers::Linear,
+    nn::SNNReservoir,
+    optim::{ToIntermediates, ToParams},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -15,7 +18,7 @@ impl LSM {
     pub fn new(d_in: usize, d_hidden: usize, d_out: usize) -> Self {
         Self {
             reservoir: SNNReservoir::new(d_in, d_hidden),
-            readout: Linear::new_with_init(d_hidden, d_out, xavier_normal)
+            readout: Linear::new_with_init(d_hidden, d_out, xavier_normal),
         }
     }
 
@@ -37,7 +40,10 @@ impl LSM {
 
 impl ToParams for LSM {
     fn params(&mut self) -> Vec<crate::optim::Param> {
-        self.readout.params()
+        let mut params = vec![];
+        params.append(&mut self.reservoir.params());
+        params.append(&mut self.readout.params());
+        params
     }
 }
 

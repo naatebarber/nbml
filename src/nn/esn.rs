@@ -2,7 +2,9 @@ use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    layers::Linear, nn::{RNNReservoir}, optim::{Param, ToIntermediates, ToParams}
+    layers::Linear,
+    nn::RNNReservoir,
+    optim::{Param, ToIntermediates, ToParams},
 };
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -59,7 +61,10 @@ impl ESN {
 
 impl ToParams for ESN {
     fn params(&mut self) -> Vec<Param> {
-        self.readout.params()
+        let mut params = vec![];
+        params.append(&mut self.reservoir.params());
+        params.append(&mut self.readout.params());
+        params
     }
 }
 

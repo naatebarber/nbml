@@ -62,7 +62,7 @@ pub trait ToParams {
         }
     }
 
-    fn dump_model(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
+    fn dump(&mut self) -> Vec<TensorData> {
         let mut params = vec![];
 
         unsafe {
@@ -79,14 +79,10 @@ pub trait ToParams {
                 });
         }
 
-        fs::write(path.into(), bincode::serialize(&params)?)?;
-
-        Ok(())
+        params
     }
 
-    fn load_model(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
-        let params: Vec<TensorData> = bincode::deserialize(&fs::read(path.into())?)?;
-
+    fn load(&mut self, params: Vec<TensorData>) {
         unsafe {
             self.params()
                 .iter_mut()
@@ -101,6 +97,18 @@ pub trait ToParams {
                     target_view += &incoming;
                 });
         }
+    }
+
+    fn persist(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
+        let params = self.dump();
+        fs::write(path.into(), bincode::serialize(&params)?)?;
+
+        Ok(())
+    }
+
+    fn restore(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
+        let params = bincode::deserialize(&fs::read(path.into())?)?;
+        self.load(params);
 
         Ok(())
     }

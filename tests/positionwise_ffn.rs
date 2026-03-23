@@ -1,4 +1,8 @@
-use nbml::{f, nn::PositionwiseFFN, optim::{AdamW, Optimizer, ToParams}};
+use nbml::{
+    f,
+    nn::PositionwiseFFN,
+    optim::{AdamW, Optimizer, ToParams},
+};
 use ndarray::Array2;
 
 #[test]
@@ -80,5 +84,3 @@ fn positionwise_ffn_learns_xor() {
         );
     }
 }
-
-
