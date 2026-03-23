@@ -8,15 +8,15 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearSSMCache {
-    pub x: Array3<f64>,
-    pub states: Array3<f64>,
+    pub x: Array3<f32>,
+    pub states: Array3<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearSSMGrads {
-    pub d_a: Array2<f64>,
-    pub d_b: Array2<f64>,
-    pub d_c: Array2<f64>,
+    pub d_a: Array2<f32>,
+    pub d_b: Array2<f32>,
+    pub d_c: Array2<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -25,9 +25,9 @@ pub struct LinearSSM {
     pub d_in: usize,
     pub d_out: usize,
 
-    pub a: Array2<f64>,
-    pub b: Array2<f64>,
-    pub c: Array2<f64>,
+    pub a: Array2<f32>,
+    pub b: Array2<f32>,
+    pub c: Array2<f32>,
 
     #[serde(skip)]
     pub cache: LinearSSMCache,
@@ -58,7 +58,7 @@ impl LinearSSM {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         assert!(features == self.d_in, "feature dimension != d_in");
@@ -97,7 +97,7 @@ impl LinearSSM {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, _) = d_loss.dim();
 
         println!("d_loss: {:?}", d_loss.dim());

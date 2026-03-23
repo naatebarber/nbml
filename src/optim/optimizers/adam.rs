@@ -3,16 +3,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::optim::{Optimizer, ToParams};
 
-pub type AdamParam = Option<(ArrayD<f64>, ArrayD<f64>)>;
+pub type AdamParam = Option<(ArrayD<f32>, ArrayD<f32>)>;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AdamW {
-    pub learning_rate: f64,
-    pub clip_grad: f64,
-    pub beta1: f64,
-    pub beta2: f64,
-    pub epsilon: f64,
-    pub weight_decay: f64,
+    pub learning_rate: f32,
+    pub clip_grad: f32,
+    pub beta1: f32,
+    pub beta2: f32,
+    pub epsilon: f32,
+    pub weight_decay: f32,
     pub t: usize,
 
     pub params: Vec<AdamParam>,

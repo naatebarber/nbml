@@ -5,20 +5,20 @@ use crate::optim::{Param, ToIntermediates, ToParams};
 
 #[derive(Default, Debug, Clone)]
 pub struct LayerNormCache {
-    pub o: Array2<f64>,
-    pub x_h: Array2<f64>,
+    pub o: Array2<f32>,
+    pub x_h: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LayerNormGrads {
-    pub d_gamma: Array1<f64>,
-    pub d_beta: Array1<f64>,
+    pub d_gamma: Array1<f32>,
+    pub d_beta: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LayerNorm {
-    pub gamma: Array1<f64>,
-    pub beta: Array1<f64>,
+    pub gamma: Array1<f32>,
+    pub beta: Array1<f32>,
 
     #[serde(skip)]
     pub cache: LayerNormCache,
@@ -37,16 +37,16 @@ impl LayerNorm {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, feature_size) = x.dim();
 
         let x = x
             .into_shape_clone((batch_size * seq_len, feature_size))
             .unwrap();
 
-        let m = (1. / feature_size as f64) * x.sum_axis(Axis(1)).insert_axis(Axis(1));
+        let m = (1. / feature_size as f32) * x.sum_axis(Axis(1)).insert_axis(Axis(1));
         let u = &x - &m;
-        let v = (1. / feature_size as f64)
+        let v = (1. / feature_size as f32)
             * &(u.clone().powi(2)).sum_axis(Axis(1)).insert_axis(Axis(1));
         let o = (&v + 1e-5).sqrt(); // (B * S, 1)
 
@@ -62,7 +62,7 @@ impl LayerNorm {
             .unwrap()
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
         let d_loss = d_loss
             .into_shape_clone((batch_size * seq_len, features))
@@ -84,8 +84,8 @@ impl LayerNorm {
         };
 
         let dx_hat = &d_loss * &self.gamma;
-        let dx = (1. / (features as f64 * &self.cache.o))
-            * (features as f64 * &dx_hat
+        let dx = (1. / (features as f32 * &self.cache.o))
+            * (features as f32 * &dx_hat
                 - &dx_hat.sum_axis(Axis(1)).insert_axis(Axis(1))
                 - &self.cache.x_h
                     * (&dx_hat * &self.cache.x_h)

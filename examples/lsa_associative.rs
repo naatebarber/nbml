@@ -11,7 +11,7 @@ use rand::Rng;
 pub const D_MODEL: usize = 32;
 pub const N_PAIRS: usize = 500;
 
-fn associative_recall_dataset(num_pairs: usize, d_model: usize) -> (Array2<f64>, Array2<f64>) {
+fn associative_recall_dataset(num_pairs: usize, d_model: usize) -> (Array2<f32>, Array2<f32>) {
     let keys = Array2::random((num_pairs, d_model), Uniform::new(0., 10.));
     let values = Array2::random((num_pairs, d_model), Uniform::new(0., 10.));
 
@@ -82,7 +82,7 @@ pub fn associative_recall() {
         test_losses.push(loss);
     }
 
-    let avg_loss = test_losses.iter().sum::<f64>() / test_losses.len() as f64;
+    let avg_loss = test_losses.iter().sum::<f32>() / test_losses.len() as f32;
 
     let end = Instant::now();
     let time = end.duration_since(start).as_secs_f32();

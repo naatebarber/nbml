@@ -20,25 +20,25 @@ pub struct SelectiveSSM {
     pub d_model: usize,
     pub d_in: usize,
 
-    pub t_w: Array2<f64>,
-    pub t_b: Array1<f64>,
-    pub a: Array2<f64>,
-    pub b: Array2<f64>,
-    pub c: Array2<f64>,
+    pub t_w: Array2<f32>,
+    pub t_b: Array1<f32>,
+    pub a: Array2<f32>,
+    pub b: Array2<f32>,
+    pub c: Array2<f32>,
 
-    pub x: Array3<f64>,
+    pub x: Array3<f32>,
 
-    pub d_tw: Array2<f64>,
-    pub d_tb: Array1<f64>,
-    pub d_b: Array2<f64>,
-    pub d_c: Array2<f64>,
+    pub d_tw: Array2<f32>,
+    pub d_tb: Array1<f32>,
+    pub d_b: Array2<f32>,
+    pub d_c: Array2<f32>,
 }
 
 impl SelectiveSSM {
     pub fn new(d_model: usize, d_in: usize) -> Self {
         let a = (0..d_model)
-            .map(|x| -1. * ((x + 1) as f64))
-            .collect::<Array1<f64>>()
+            .map(|x| -1. * ((x + 1) as f32))
+            .collect::<Array1<f32>>()
             .insert_axis(Axis(0))
             .broadcast((d_in, d_model))
             .unwrap()
@@ -54,7 +54,7 @@ impl SelectiveSSM {
             b: Array2::random((d_in, d_model), Normal::new(0., 1e-2).unwrap()),
             c: Array2::random(
                 (d_in, d_model),
-                Normal::new(0., 1. / (d_model as f64).sqrt()).unwrap(),
+                Normal::new(0., 1. / (d_model as f32).sqrt()).unwrap(),
             ),
 
             x: Array3::zeros((0, 0, 0)),
@@ -66,7 +66,7 @@ impl SelectiveSSM {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, _grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, _grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         assert!(

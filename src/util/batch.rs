@@ -1,6 +1,6 @@
 use ndarray::{Array2, Array3};
 
-pub fn batch_with_mask(x: Vec<Array2<f64>>) -> (Array3<f64>, Array2<f64>) {
+pub fn batch_with_mask(x: Vec<Array2<f32>>) -> (Array3<f32>, Array2<f32>) {
     let batch_size = x.len();
     let max_seq_len = x.iter().map(|x| x.dim().0).max().unwrap_or(0);
     let features = x.first().map(|x| x.dim().1).unwrap_or(0);

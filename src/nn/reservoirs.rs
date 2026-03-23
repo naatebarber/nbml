@@ -9,9 +9,9 @@ pub struct RNNReservoir {
     pub d_in: usize,
     pub d_hidden: usize,
 
-    pub w_p: Array2<f64>,
-    pub w_r: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w_p: Array2<f32>,
+    pub w_r: Array2<f32>,
+    pub b: Array1<f32>,
 }
 
 impl RNNReservoir {
@@ -26,13 +26,13 @@ impl RNNReservoir {
         }
     }
 
-    pub fn set_spectral_radius(&mut self, desired: f64, n: usize) -> f64 {
+    pub fn set_spectral_radius(&mut self, desired: f32, n: usize) -> f32 {
         let lambda = f::calculate_spectral_radius(&self.w_r, n);
         self.w_r *= desired / lambda;
         f::calculate_spectral_radius(&self.w_r, n)
     }
 
-    pub fn forward(&self, x: Array3<f64>) -> Array3<f64> {
+    pub fn forward(&self, x: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         assert!(features == self.d_in, "feature dimension != d_in");
@@ -62,7 +62,7 @@ impl RNNReservoir {
         encoded
     }
 
-    pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>) {
+    pub fn step(&self, x: &Array2<f32>, h: &mut Array2<f32>) {
         let x_p = x.dot(&self.w_p);
         let r = h.dot(&self.w_r);
 
@@ -77,10 +77,10 @@ pub struct SNNReservoir {
     pub d_in: usize,
     pub d_hidden: usize,
 
-    pub w_p: Array2<f64>,
-    pub taus: Array1<f64>,
-    pub thresholds: Array1<f64>,
-    pub w_r: Array2<f64>,
+    pub w_p: Array2<f32>,
+    pub taus: Array1<f32>,
+    pub thresholds: Array1<f32>,
+    pub w_r: Array2<f32>,
 }
 
 impl SNNReservoir {
@@ -96,21 +96,21 @@ impl SNNReservoir {
         }
     }
 
-    pub fn set_threshold_range(&mut self, low: f64, high: f64) {
+    pub fn set_threshold_range(&mut self, low: f32, high: f32) {
         self.thresholds = Array1::random(self.d_hidden, Uniform::new(low, high));
     }
 
-    pub fn set_tau_range(&mut self, low: f64, high: f64) {
+    pub fn set_tau_range(&mut self, low: f32, high: f32) {
         self.taus = Array1::random(self.d_hidden, Uniform::new(low, high));
     }
 
-    pub fn set_spectral_radius(&mut self, desired: f64, n: usize) -> f64 {
+    pub fn set_spectral_radius(&mut self, desired: f32, n: usize) -> f32 {
         let lambda = f::calculate_spectral_radius(&self.w_r, n);
         self.w_r *= desired / lambda;
         f::calculate_spectral_radius(&self.w_r, n)
     }
 
-    pub fn step(&self, x: &Array2<f64>, state: &mut Array2<f64>, delta: f64) {
+    pub fn step(&self, x: &Array2<f32>, state: &mut Array2<f32>, delta: f32) {
         let decay = self.taus.map(|t| (-delta / t).exp()).insert_axis(Axis(0));
         *state *= &decay;
         *state += &x.dot(&self.w_p);

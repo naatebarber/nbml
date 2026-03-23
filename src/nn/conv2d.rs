@@ -8,13 +8,13 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct Conv2DCache {
-    pub stack: Array2<f64>,
+    pub stack: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct Conv2DGrads {
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    pub d_w: Array2<f32>,
+    pub d_b: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -24,8 +24,8 @@ pub struct Conv2D {
     pub k_h: usize,
     pub k_w: usize,
 
-    pub w: Array2<f64>, // (C_in * kH * kW, C_out)
-    pub b: Array1<f64>, // (C_out)
+    pub w: Array2<f32>, // (C_in * kH * kW, C_out)
+    pub b: Array1<f32>, // (C_out)
 
     #[serde(skip)]
     pub cache: Conv2DCache,
@@ -55,7 +55,7 @@ impl Conv2D {
         }
     }
 
-    pub fn forward(&mut self, x: Array4<f64>, grad: bool) -> Array4<f64> {
+    pub fn forward(&mut self, x: Array4<f32>, grad: bool) -> Array4<f32> {
         let (batch_size, channels_in, h, w) = x.dim();
 
         assert!(
@@ -102,7 +102,7 @@ impl Conv2D {
         conv_out
     }
 
-    pub fn backward(&mut self, d_loss: Array4<f64>) -> Array4<f64> {
+    pub fn backward(&mut self, d_loss: Array4<f32>) -> Array4<f32> {
         let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim();
 
         let d_z = d_loss
@@ -186,13 +186,13 @@ impl ToIntermediates for Conv2D {
 
 #[derive(Default, Debug, Clone)]
 pub struct PatchwiseConv2DCache {
-    pub x: Array4<f64>,
+    pub x: Array4<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct PatchwiseConv2DGrads {
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    pub d_w: Array2<f32>,
+    pub d_b: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -202,8 +202,8 @@ pub struct PatchwiseConv2D {
     pub k_h: usize,
     pub k_w: usize,
 
-    pub w: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w: Array2<f32>,
+    pub b: Array1<f32>,
 
     #[serde(skip)]
     pub cache: PatchwiseConv2DCache,
@@ -233,7 +233,7 @@ impl PatchwiseConv2D {
         }
     }
 
-    pub fn forward(&mut self, x: Array4<f64>, grad: bool) -> Array4<f64> {
+    pub fn forward(&mut self, x: Array4<f32>, grad: bool) -> Array4<f32> {
         let (batch_size, channels, h, w) = x.dim();
         assert!(
             channels == self.channels_in,
@@ -269,7 +269,7 @@ impl PatchwiseConv2D {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array4<f64>) -> Array4<f64> {
+    pub fn backward(&mut self, d_loss: Array4<f32>) -> Array4<f32> {
         let (batch_size, channels_out, strides_h, strides_w) = d_loss.dim();
 
         if self.grads.d_w.dim() == (0, 0) {

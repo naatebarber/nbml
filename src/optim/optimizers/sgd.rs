@@ -4,7 +4,7 @@ use crate::optim::{Optimizer, ToParams};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SGD {
-    pub learning_rate: f64,
+    pub learning_rate: f32,
 }
 
 impl Default for SGD {

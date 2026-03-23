@@ -82,7 +82,7 @@ fn patchwise_conv2d_produces_correct_shapes() {
     );
 }
 
-fn inversion_dataset() -> (Array4<f64>, Array4<f64>) {
+fn inversion_dataset() -> (Array4<f32>, Array4<f32>) {
     let x = Array4::random((10, 1, 10, 10), Uniform::new(0., 1.)).round();
     let y = (&x - 1.).abs();
 
@@ -150,7 +150,7 @@ fn patchwise_conv2d_trains_inversion() {
         losses.push(loss);
     }
 
-    let avg_loss = losses.iter().sum::<f64>() / losses.len() as f64;
+    let avg_loss = losses.iter().sum::<f32>() / losses.len() as f32;
     let max_loss = 0.1;
 
     assert!(
@@ -159,7 +159,7 @@ fn patchwise_conv2d_trains_inversion() {
     );
 }
 
-fn shift_dataset() -> (Array4<f64>, Array4<f64>) {
+fn shift_dataset() -> (Array4<f32>, Array4<f32>) {
     let mut batch = Array4::zeros((10, 1, 11, 11));
     for i in 0..10 {
         let mut vertical_slice = batch.slice_mut(s![i, .., .., i]);

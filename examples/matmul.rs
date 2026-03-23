@@ -5,7 +5,7 @@ use nbml::ndarray::Array2;
 fn main() {
     let start = Instant::now();
 
-    let a: Array2<f64> = Array2::ones((4000, 4000));
+    let a: Array2<f32> = Array2::ones((4000, 4000));
     let b = Array2::ones((4000, 4000));
 
     a.dot(&b);

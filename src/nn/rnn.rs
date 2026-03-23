@@ -8,25 +8,25 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct RNNCache {
-    pub x: Array3<f64>,
-    pub preactivations: Array3<f64>,
-    pub states: Array3<f64>,
+    pub x: Array3<f32>,
+    pub preactivations: Array3<f32>,
+    pub states: Array3<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct RNNGrads {
-    pub d_wi: Array2<f64>,
-    pub d_wr: Array2<f64>,
-    pub d_b: Array1<f64>,
+    pub d_wi: Array2<f32>,
+    pub d_wr: Array2<f32>,
+    pub d_b: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RNN {
     pub d_model: usize,
 
-    pub w_i: Array2<f64>,
-    pub w_r: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w_i: Array2<f32>,
+    pub w_r: Array2<f32>,
+    pub b: Array1<f32>,
 
     #[serde(skip)]
     pub cache: RNNCache,
@@ -48,7 +48,7 @@ impl RNN {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         assert!(features == self.d_model, "feature dimension != d_model");
@@ -86,7 +86,7 @@ impl RNN {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         if self.grads.d_wi.dim() == (0, 0) {

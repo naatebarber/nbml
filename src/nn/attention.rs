@@ -1,4 +1,4 @@
-use std::f64;
+use std::f32;
 
 use ndarray::{Array1, Array2, Array3, Axis, s, stack};
 use serde::{Deserialize, Serialize};
@@ -10,10 +10,10 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct AttentionCache {
-    pub q: Array3<f64>,
-    pub k: Array3<f64>,
-    pub v: Array3<f64>,
-    pub weights: Array3<f64>,
+    pub q: Array3<f32>,
+    pub k: Array3<f32>,
+    pub v: Array3<f32>,
+    pub weights: Array3<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -31,12 +31,12 @@ impl Attention {
 
     pub fn forward(
         &mut self,
-        q: Array3<f64>,
-        k: Array3<f64>,
-        v: Array3<f64>,
-        mask: Array3<f64>,
+        q: Array3<f32>,
+        k: Array3<f32>,
+        v: Array3<f32>,
+        mask: Array3<f32>,
         grad: bool,
-    ) -> Array3<f64> {
+    ) -> Array3<f32> {
         let (batch_size, seq_len_q, _) = q.dim();
         let (_, seq_len_k, features_k) = k.dim();
         let (_, _, features_v) = v.dim();
@@ -63,7 +63,7 @@ impl Attention {
 
         let mut output = Array3::zeros((batch_size, seq_len_q, features_v));
 
-        let mask = mask.mapv(|x| if x == 0. { -f64::INFINITY } else { 0. });
+        let mask = mask.mapv(|x| if x == 0. { -f32::INFINITY } else { 0. });
 
         for i in 0..batch_size {
             let q_i = q.slice(s![i, .., ..]);
@@ -71,7 +71,7 @@ impl Attention {
             let v_i = v.slice(s![i, .., ..]);
 
             let scores = q_i.dot(&k_i.t());
-            let scores = (scores / (features_k as f64).sqrt()) + &mask.slice(s![i, .., ..]);
+            let scores = (scores / (features_k as f32).sqrt()) + &mask.slice(s![i, .., ..]);
             let weights = f::softmax(&scores);
 
             let out = weights.dot(&v_i);
@@ -85,7 +85,7 @@ impl Attention {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> (Array3<f64>, Array3<f64>, Array3<f64>) {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> (Array3<f32>, Array3<f32>, Array3<f32>) {
         let (batch_size, _, _) = self.cache.q.dim();
         let (_, _, features_k) = self.cache.k.dim();
 
@@ -105,7 +105,7 @@ impl Attention {
 
             let d_weights = d_loss_i.dot(&v_i.t());
             let d_scores = d_softmax(&weights_i.to_owned(), &d_weights);
-            let d_scores = d_scores / (features_k as f64).sqrt();
+            let d_scores = d_scores / (features_k as f32).sqrt();
 
             let d_k_i_t = q_i.t().dot(&d_scores);
             let d_k_i = d_k_i_t.t();
@@ -118,7 +118,7 @@ impl Attention {
         (d_q, d_k, d_v)
     }
 
-    pub fn weights(&self) -> &Array3<f64> {
+    pub fn weights(&self) -> &Array3<f32> {
         &self.cache.weights
     }
 }
@@ -136,16 +136,16 @@ impl ToIntermediates for Attention {
 
 #[derive(Default, Debug, Clone)]
 pub struct SelfAttentionCache {
-    pub x_2d: Array2<f64>,
-    pub attn_2d: Array2<f64>,
+    pub x_2d: Array2<f32>,
+    pub attn_2d: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct SelfAttentionGrads {
-    pub d_w_qkv: Array2<f64>,
-    pub d_b_qkv: Array1<f64>,
-    pub d_w_o: Array2<f64>,
-    pub d_b_o: Array1<f64>,
+    pub d_w_qkv: Array2<f32>,
+    pub d_b_qkv: Array1<f32>,
+    pub d_w_o: Array2<f32>,
+    pub d_b_o: Array1<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -154,10 +154,10 @@ pub struct SelfAttention {
     pub d_head: usize,
     pub n_head: usize,
 
-    pub w_qkv: Array2<f64>,
-    pub b_qkv: Array1<f64>,
-    pub w_o: Array2<f64>,
-    pub b_o: Array1<f64>,
+    pub w_qkv: Array2<f32>,
+    pub b_qkv: Array1<f32>,
+    pub w_o: Array2<f32>,
+    pub b_o: Array1<f32>,
 
     pub attention: Attention,
 
@@ -186,7 +186,7 @@ impl SelfAttention {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, mask: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, mask: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
         assert!(features == self.d_in, "feature dimension mismatch");
 
@@ -256,7 +256,7 @@ impl SelfAttention {
             .unwrap()
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         if self.grads.d_w_o.dim() == (0, 0) {
@@ -354,19 +354,19 @@ impl ToIntermediates for SelfAttention {
 
 #[derive(Default, Debug, Clone)]
 pub struct CrossAttentionCache {
-    pub x_q_2d: Array2<f64>,
-    pub x_kv_2d: Array2<f64>,
-    pub attn_2d: Array2<f64>,
+    pub x_q_2d: Array2<f32>,
+    pub x_kv_2d: Array2<f32>,
+    pub attn_2d: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct CrossAttentionGrads {
-    pub d_w_q: Array2<f64>,
-    pub d_b_q: Array1<f64>,
-    pub d_w_kv: Array2<f64>,
-    pub d_b_kv: Array1<f64>,
-    pub d_w_o: Array2<f64>,
-    pub d_b_o: Array1<f64>,
+    pub d_w_q: Array2<f32>,
+    pub d_b_q: Array1<f32>,
+    pub d_w_kv: Array2<f32>,
+    pub d_b_kv: Array1<f32>,
+    pub d_w_o: Array2<f32>,
+    pub d_b_o: Array1<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -375,12 +375,12 @@ pub struct CrossAttention {
     pub d_head: usize,
     pub n_head: usize,
 
-    pub w_q: Array2<f64>,
-    pub b_q: Array1<f64>,
-    pub w_kv: Array2<f64>,
-    pub b_kv: Array1<f64>,
-    pub w_o: Array2<f64>,
-    pub b_o: Array1<f64>,
+    pub w_q: Array2<f32>,
+    pub b_q: Array1<f32>,
+    pub w_kv: Array2<f32>,
+    pub b_kv: Array1<f32>,
+    pub w_o: Array2<f32>,
+    pub b_o: Array1<f32>,
 
     pub attention: Attention,
 
@@ -413,11 +413,11 @@ impl CrossAttention {
 
     pub fn forward(
         &mut self,
-        x_q: Array3<f64>,
-        x_kv: Array3<f64>,
-        mask: Array3<f64>,
+        x_q: Array3<f32>,
+        x_kv: Array3<f32>,
+        mask: Array3<f32>,
         grad: bool,
-    ) -> Array3<f64> {
+    ) -> Array3<f32> {
         let (batch_size, seq_len_q, features_q) = x_q.dim();
         let (_, seq_len_kv, features_kv) = x_kv.dim();
 
@@ -490,7 +490,7 @@ impl CrossAttention {
             .unwrap()
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> (Array3<f64>, Array3<f64>) {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> (Array3<f32>, Array3<f32>) {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         if self.grads.d_w_o.dim() == (0, 0) {

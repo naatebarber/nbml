@@ -1,4 +1,4 @@
-use core::f64;
+use core::f32;
 
 use ndarray::{Array1, Array2, Array3, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
@@ -6,83 +6,83 @@ use ndarray_stats::QuantileExt;
 use rand::{Rng, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 
-pub type ActivationFn = fn(&Array2<f64>) -> Array2<f64>;
-pub type InitializationFn = fn((usize, usize)) -> Array2<f64>;
+pub type ActivationFn = fn(&Array2<f32>) -> Array2<f32>;
+pub type InitializationFn = fn((usize, usize)) -> Array2<f32>;
 
 // ACTIVATIONS
 
-pub fn relu(x: &Array2<f64>) -> Array2<f64> {
+pub fn relu(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|v| v.max(0.))
 }
 
-pub fn d_relu(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_relu(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|v| v.signum().max(0.))
 }
 
-pub fn tanh(x: &Array2<f64>) -> Array2<f64> {
+pub fn tanh(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|v| v.tanh())
 }
 
-pub fn d_tanh(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_tanh(x: &Array2<f32>) -> Array2<f32> {
     1. - (x.mapv(|v| v.tanh())).powi(2)
 }
 
-pub fn leaky_relu(x: &Array2<f64>) -> Array2<f64> {
+pub fn leaky_relu(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|x| if x >= 0. { x } else { 0.01 * x })
 }
 
-pub fn d_leaky_relu(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_leaky_relu(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|x| if x >= 0. { 1. } else { 0.01 })
 }
 
-pub fn exp(x: &Array2<f64>) -> Array2<f64> {
+pub fn exp(x: &Array2<f32>) -> Array2<f32> {
     x.exp()
 }
 
-pub fn d_exp(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_exp(x: &Array2<f32>) -> Array2<f32> {
     x.exp()
 }
 
-pub fn elu(x: &Array2<f64>) -> Array2<f64> {
-    let x_pos = x.clamp(0., f64::MAX);
-    let x_neg = x.clamp(f64::MIN, 0.);
+pub fn elu(x: &Array2<f32>) -> Array2<f32> {
+    let x_pos = x.clamp(0., f32::MAX);
+    let x_neg = x.clamp(f32::MIN, 0.);
 
     &x_pos + (x_neg.exp() - 1.)
 }
 
-pub fn d_elu(x: &Array2<f64>) -> Array2<f64> {
-    let x_pos = x.clamp(0., f64::MAX);
-    let x_neg = x.clamp(f64::MIN, 0.);
+pub fn d_elu(x: &Array2<f32>) -> Array2<f32> {
+    let x_pos = x.clamp(0., f32::MAX);
+    let x_neg = x.clamp(f32::MIN, 0.);
 
     &x_pos.signum() + x_neg.exp()
 }
 
-pub fn softplus(x: &Array2<f64>) -> Array2<f64> {
+pub fn softplus(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|v| if v > 20.0 { v } else { (1.0 + v.exp()).ln() })
 }
 
-pub fn d_softplus(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_softplus(x: &Array2<f32>) -> Array2<f32> {
     sigmoid(x)
 }
 
-pub fn ident(x: &Array2<f64>) -> Array2<f64> {
+pub fn ident(x: &Array2<f32>) -> Array2<f32> {
     x.to_owned()
 }
 
-pub fn d_ident(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_ident(x: &Array2<f32>) -> Array2<f32> {
     Array2::ones(x.dim())
 }
 
-pub fn sigmoid(x: &Array2<f64>) -> Array2<f64> {
+pub fn sigmoid(x: &Array2<f32>) -> Array2<f32> {
     x.mapv(|v| 1.0 / (1.0 + (-v).exp()))
 }
 
-pub fn d_sigmoid(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_sigmoid(x: &Array2<f32>) -> Array2<f32> {
     let s = sigmoid(x);
     &s * &(1.0 - &s)
 }
 
-pub fn softmax(x: &Array2<f64>) -> Array2<f64> {
+pub fn softmax(x: &Array2<f32>) -> Array2<f32> {
     let maxes = x
         .map_axis(Axis(1), |row| row.max().cloned().unwrap_or(1e-4))
         .insert_axis(Axis(1));
@@ -97,7 +97,7 @@ pub fn softmax(x: &Array2<f64>) -> Array2<f64> {
     return last;
 }
 
-pub fn d_softmax(s: &Array2<f64>, g: &Array2<f64>) -> Array2<f64> {
+pub fn d_softmax(s: &Array2<f32>, g: &Array2<f32>) -> Array2<f32> {
     let dot = (g * s).sum_axis(Axis(1)).insert_axis(Axis(1));
     s * (g - dot)
 }
@@ -106,35 +106,35 @@ pub fn d_softmax(s: &Array2<f64>, g: &Array2<f64>) -> Array2<f64> {
  * The output of this method gets multiplied against the incoming gradient. Since the gradient of
  * cross entropy loss is y_pred - y, we don't want to mutate it at all, and return 1
  */
-pub fn d_softmax_cross_entropy(x: &Array2<f64>) -> Array2<f64> {
+pub fn d_softmax_cross_entropy(x: &Array2<f32>) -> Array2<f32> {
     Array2::ones(x.dim())
 }
 
 // INITS
 
-pub fn he(shape: (usize, usize)) -> Array2<f64> {
-    let bound = f64::sqrt(6.) / f64::sqrt(shape.0 as f64);
+pub fn he(shape: (usize, usize)) -> Array2<f32> {
+    let bound = f32::sqrt(6.) / f32::sqrt(shape.0 as f32);
     return Array2::random(shape, Uniform::new(-bound, bound));
 }
 
-pub fn xavier_normal(shape: (usize, usize)) -> Array2<f64> {
-    let std = (2. / ((shape.0 + shape.1) as f64)).sqrt();
+pub fn xavier_normal(shape: (usize, usize)) -> Array2<f32> {
+    let std = (2. / ((shape.0 + shape.1) as f32)).sqrt();
     Array2::random(
         shape,
         ndarray_rand::rand_distr::Normal::new(0., std).unwrap(),
     )
 }
 
-pub fn xavier(shape: (usize, usize)) -> Array2<f64> {
-    let bound = (6. / (shape.0 as f64 + shape.1 as f64)).sqrt();
+pub fn xavier(shape: (usize, usize)) -> Array2<f32> {
+    let bound = (6. / (shape.0 as f32 + shape.1 as f32)).sqrt();
     return Array2::random(shape, Uniform::new(-bound, bound));
 }
 
 // LOSSES
 
-pub fn soft_cross_entropy_loss(probs: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64>) {
+pub fn soft_cross_entropy_loss(probs: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
     let log_probs = probs.mapv(|p| p.max(1e-10).ln());
-    let loss = -(targets * &log_probs).sum() / probs.dim().0 as f64;
+    let loss = -(targets * &log_probs).sum() / probs.dim().0 as f32;
 
     let d_loss = probs - targets;
 
@@ -142,9 +142,9 @@ pub fn soft_cross_entropy_loss(probs: &Array2<f64>, targets: &Array2<f64>) -> (f
 }
 
 pub fn batch_soft_cross_entropy_loss(
-    probs: Array3<f64>,
-    targets: Array3<f64>,
-) -> (f64, Array3<f64>) {
+    probs: Array3<f32>,
+    targets: Array3<f32>,
+) -> (f32, Array3<f32>) {
     let (b, s, d) = probs.dim();
     let probs_2d = probs.into_shape_clone((b * s, d)).unwrap();
     let targets_2d = targets.into_shape_clone((b * s, d)).unwrap();
@@ -153,7 +153,7 @@ pub fn batch_soft_cross_entropy_loss(
     (loss, d_loss)
 }
 
-pub fn cross_entropy_loss(probs: &Array2<f64>, classes: &Array1<usize>) -> (f64, Array2<f64>) {
+pub fn cross_entropy_loss(probs: &Array2<f32>, classes: &Array1<usize>) -> (f32, Array2<f32>) {
     let n = probs.dim().0;
     let mut loss = 0.0;
     let mut d_loss = probs.clone();
@@ -163,13 +163,13 @@ pub fn cross_entropy_loss(probs: &Array2<f64>, classes: &Array1<usize>) -> (f64,
         d_loss[[i, classes[i]]] -= 1.0;
     }
 
-    loss /= n as f64;
-    let d_loss = d_loss / n as f64;
+    loss /= n as f32;
+    let d_loss = d_loss / n as f32;
 
     (loss, d_loss)
 }
 
-pub fn batch_cross_entropy_loss(probs: Array3<f64>, classes: Array2<usize>) -> (f64, Array3<f64>) {
+pub fn batch_cross_entropy_loss(probs: Array3<f32>, classes: Array2<usize>) -> (f32, Array3<f32>) {
     let (b, s, d) = probs.dim();
     let probs_2d = probs.into_shape_clone((b * s, d)).unwrap();
     let classes_1d = classes.into_shape_clone((b * s,)).unwrap();
@@ -178,9 +178,9 @@ pub fn batch_cross_entropy_loss(probs: Array3<f64>, classes: Array2<usize>) -> (
     (loss, d_loss)
 }
 
-pub fn bce_loss(sigmoid_probs: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64>) {
+pub fn bce_loss(sigmoid_probs: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
     let eps = 1e-10;
-    let n = sigmoid_probs.len() as f64;
+    let n = sigmoid_probs.len() as f32;
 
     let loss = -(targets * &sigmoid_probs.mapv(|p| p.max(eps).ln())
         + (1.0 - targets) * &sigmoid_probs.mapv(|p| (1.0 - p).max(eps).ln()))
@@ -194,7 +194,7 @@ pub fn bce_loss(sigmoid_probs: &Array2<f64>, targets: &Array2<f64>) -> (f64, Arr
     (loss, d_loss)
 }
 
-pub fn batch_bce_loss(sigmoid_probs: Array3<f64>, targets: Array3<f64>) -> (f64, Array3<f64>) {
+pub fn batch_bce_loss(sigmoid_probs: Array3<f32>, targets: Array3<f32>) -> (f32, Array3<f32>) {
     let (b, s, d) = sigmoid_probs.dim();
     let sigmoid_probs_2d = sigmoid_probs.into_shape_clone((b * s, d)).unwrap();
     let targets_2d = targets.into_shape_clone((b * s, d)).unwrap();
@@ -203,9 +203,9 @@ pub fn batch_bce_loss(sigmoid_probs: Array3<f64>, targets: Array3<f64>) -> (f64,
     (loss, d_loss)
 }
 
-pub fn mse_loss(logits: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64>) {
+pub fn mse_loss(logits: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
     let diff = logits - targets;
-    let n = logits.len() as f64;
+    let n = logits.len() as f32;
 
     let loss = diff.pow2().mean().unwrap();
 
@@ -214,7 +214,7 @@ pub fn mse_loss(logits: &Array2<f64>, targets: &Array2<f64>) -> (f64, Array2<f64
     (loss, d_loss)
 }
 
-pub fn batch_mse_loss(logits: Array3<f64>, targets: Array3<f64>) -> (f64, Array3<f64>) {
+pub fn batch_mse_loss(logits: Array3<f32>, targets: Array3<f32>) -> (f32, Array3<f32>) {
     let (b, s, d) = logits.dim();
     let logits_2d = logits.into_shape_clone((b * s, d)).unwrap();
     let targets_2d = targets.into_shape_clone((b * s, d)).unwrap();
@@ -225,16 +225,16 @@ pub fn batch_mse_loss(logits: Array3<f64>, targets: Array3<f64>) -> (f64, Array3
 
 // NORM
 
-pub fn l2(x: &Array2<f64>) -> Array1<f64> {
+pub fn l2(x: &Array2<f32>) -> Array1<f32> {
     let eps = 1e-12;
     x.pow2().sum_axis(Axis(1)).sqrt().mapv(|x| x.max(eps))
 }
 
-pub fn l2_norm(x: &Array2<f64>) -> Array2<f64> {
+pub fn l2_norm(x: &Array2<f32>) -> Array2<f32> {
     x / l2(&x).insert_axis(Axis(1))
 }
 
-pub fn d_l2_norm(x: &Array2<f64>, grad: &Array2<f64>) -> Array2<f64> {
+pub fn d_l2_norm(x: &Array2<f32>, grad: &Array2<f32>) -> Array2<f32> {
     let norm = l2(x).insert_axis(Axis(1));
     let x_hat = x / &norm;
     let dot = (&x_hat * grad).sum_axis(Axis(1)).insert_axis(Axis(1));
@@ -243,15 +243,15 @@ pub fn d_l2_norm(x: &Array2<f64>, grad: &Array2<f64>) -> Array2<f64> {
 
 // MISC
 
-pub fn linear_norm(x: &Array2<f64>) -> Array2<f64> {
+pub fn linear_norm(x: &Array2<f32>) -> Array2<f32> {
     let sum = x.sum_axis(Axis(1)).insert_axis(Axis(1));
     x / &sum
 }
 
 pub fn softmax_vector_jacobian_product(
-    upstream: &Array2<f64>,
-    softmax_out: &Array2<f64>,
-) -> Array2<f64> {
+    upstream: &Array2<f32>,
+    softmax_out: &Array2<f32>,
+) -> Array2<f32> {
     let mut grad = upstream.clone();
 
     for ((mut g_row, s_row), u_row) in grad
@@ -269,16 +269,16 @@ pub fn softmax_vector_jacobian_product(
     grad
 }
 
-pub fn positional_encoding_seq(seq_len: usize, features: usize) -> Array2<f64> {
+pub fn positional_encoding_seq(seq_len: usize, features: usize) -> Array2<f32> {
     let mut pe = Array2::zeros((seq_len, features));
-    let n: f64 = 10_000.;
+    let n: f32 = 10_000.;
 
     for k in 0..seq_len {
         for i in 0..(features / 2) {
-            let exp = n.powf((2.0 * i as f64) / features as f64);
-            pe[[k, 2 * i]] = f64::sin((k as f64) / exp);
+            let exp = n.powf((2.0 * i as f32) / features as f32);
+            pe[[k, 2 * i]] = f32::sin((k as f32) / exp);
             if (2 * i + 1) < features {
-                pe[[k, 2 * i + 1]] = f64::cos((k as f64) / exp);
+                pe[[k, 2 * i + 1]] = f32::cos((k as f32) / exp);
             }
         }
     }
@@ -287,7 +287,7 @@ pub fn positional_encoding_seq(seq_len: usize, features: usize) -> Array2<f64> {
 }
 
 // TODO: Use with Gumbel max sampling, avoid standard softmax entirely.
-pub fn log_softmax(x: Array2<f64>) -> Array2<f64> {
+pub fn log_softmax(x: Array2<f32>) -> Array2<f32> {
     let maxes = x
         .map_axis(Axis(1), |row| row.max().cloned().unwrap_or(1e-4))
         .insert_axis(Axis(1));
@@ -300,7 +300,7 @@ pub fn log_softmax(x: Array2<f64>) -> Array2<f64> {
     &d - sums.ln()
 }
 
-pub fn clip_grad(mut grad: Array2<f64>, clip: f64) -> Array2<f64> {
+pub fn clip_grad(mut grad: Array2<f32>, clip: f32) -> Array2<f32> {
     let norm_sq = grad.mapv(|x| x * x).sum();
     let norm = norm_sq.sqrt();
 
@@ -311,7 +311,7 @@ pub fn clip_grad(mut grad: Array2<f64>, clip: f64) -> Array2<f64> {
     grad
 }
 
-pub fn causal_mask(n: usize) -> Array2<f64> {
+pub fn causal_mask(n: usize) -> Array2<f32> {
     let mut mask = Array2::zeros((n, n));
 
     for i in 0..n {
@@ -322,8 +322,8 @@ pub fn causal_mask(n: usize) -> Array2<f64> {
     mask
 }
 
-pub fn sample_categorical(probs: &Array1<f64>, rng: &mut ThreadRng) -> usize {
-    let mut u: f64 = rng.random();
+pub fn sample_categorical(probs: &Array1<f32>, rng: &mut ThreadRng) -> usize {
+    let mut u: f32 = rng.random();
 
     for (i, &p) in probs.iter().enumerate() {
         if u < p {
@@ -336,36 +336,36 @@ pub fn sample_categorical(probs: &Array1<f64>, rng: &mut ThreadRng) -> usize {
     return 0;
 }
 
-pub fn sample_gumbel_categorical(log_probs: &Array1<f64>, rng: &mut ThreadRng) -> usize {
+pub fn sample_gumbel_categorical(log_probs: &Array1<f32>, rng: &mut ThreadRng) -> usize {
     let u = (0..log_probs.len())
-        .map(|_| -f64::ln(-f64::ln(rng.random())))
-        .collect::<Array1<f64>>();
+        .map(|_| -f32::ln(-f32::ln(rng.random())))
+        .collect::<Array1<f32>>();
 
     (log_probs + u).argmax().unwrap()
 }
 
-pub fn gaussian_log_prob(x: &Array2<f64>, u: &Array2<f64>, o: &Array2<f64>) -> Array1<f64> {
+pub fn gaussian_log_prob(x: &Array2<f32>, u: &Array2<f32>, o: &Array2<f32>) -> Array1<f32> {
     let eps = 1e-8;
     let quadratic = (x - u).powi(2) / o.powi(2);
     let norm = 2. * o.map(|v| v.max(eps).ln());
-    let constant = (f64::consts::PI * 2.).ln();
+    let constant = (f32::consts::PI * 2.).ln();
 
     let dims = -0.5 * (quadratic + norm + constant);
 
     dims.sum_axis(Axis(1))
 }
 
-pub fn tanh_gaussian_correction(a_raw: &Array2<f64>) -> Array1<f64> {
+pub fn tanh_gaussian_correction(a_raw: &Array2<f32>) -> Array1<f32> {
     let d_tanh = d_tanh(a_raw);
     d_tanh.ln().sum_axis(Axis(1))
 }
 
-pub fn tanh_gaussian_correction_eps(a_raw: &Array2<f64>) -> Array1<f64> {
+pub fn tanh_gaussian_correction_eps(a_raw: &Array2<f32>) -> Array1<f32> {
     let deriv = 1.0 - a_raw.mapv(|u| u.tanh().powi(2)); // d_tanh(u)
     deriv.mapv(|v| (v + 1e-8).ln()).sum_axis(Axis(1))
 }
 
-pub fn calculate_spectral_radius(w_r: &Array2<f64>, n: usize) -> f64 {
+pub fn calculate_spectral_radius(w_r: &Array2<f32>, n: usize) -> f32 {
     let mut h = Array2::ones((1, w_r.dim().0));
     let mut radius = 0.;
     for _ in 0..n {

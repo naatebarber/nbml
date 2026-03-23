@@ -45,7 +45,7 @@ fn linear_attention_gradient_check() {
     let d_head = 4;
     let batch_size = 3;
     let seq_len = 3;
-    let eps = 1e-5;
+    let eps = 1e-3;
 
     let mut attn = LinearAttention::new(d_in, d_head);
     let x = f::xavier_normal((batch_size * seq_len, d_in))
@@ -74,7 +74,7 @@ fn linear_attention_gradient_check() {
 
                 let diff = (numerical - analytical).abs();
                 assert!(
-                    diff < 1e-4,
+                    diff < 1e-3,
                     "gradient mismatch at [{},{},{}]: numerical={}, analytical={}, diff={}",
                     b,
                     s,
@@ -94,7 +94,7 @@ fn gated_linear_attention_gradient_check() {
     let d_head = 4;
     let batch_size = 3;
     let seq_len = 5;
-    let eps = 1e-5;
+    let eps = 1e-3;
 
     let mut attn = GatedLinearAttention::new(d_in, d_head);
     let x = f::xavier_normal((batch_size * seq_len, d_in))
@@ -123,7 +123,7 @@ fn gated_linear_attention_gradient_check() {
 
                 let diff = (numerical - analytical).abs();
                 assert!(
-                    diff < 1e-4,
+                    diff < 1e-3,
                     "gradient mismatch at [{},{},{}]: numerical={}, analytical={}, diff={}",
                     b,
                     s,
@@ -140,7 +140,7 @@ fn gated_linear_attention_gradient_check() {
 fn make_associative_recall_dataset(
     batch_size: usize,
     d_model: usize,
-) -> (Array3<f64>, Array3<f64>) {
+) -> (Array3<f32>, Array3<f32>) {
     let num_pairs = 3;
     let seq_len = num_pairs * 2 + 2;
 
@@ -148,10 +148,10 @@ fn make_associative_recall_dataset(
     let mut y = Array3::zeros((batch_size, seq_len, d_model));
 
     for b in 0..batch_size {
-        let keys: Vec<Array1<f64>> = (0..num_pairs)
+        let keys: Vec<Array1<f32>> = (0..num_pairs)
             .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
             .collect();
-        let values: Vec<Array1<f64>> = (0..num_pairs)
+        let values: Vec<Array1<f32>> = (0..num_pairs)
             .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
             .collect();
 
@@ -184,7 +184,7 @@ fn linear_attention_associative_recall() {
     let mut optim = AdamW::default().with(&mut attn);
     optim.learning_rate = 1e-3;
 
-    let mut final_loss = f64::MAX;
+    let mut final_loss = f32::MAX;
 
     let (x, y) = make_associative_recall_dataset(batch_size, d_in);
 
@@ -227,7 +227,7 @@ fn gated_linear_attention_associative_recall() {
     let mut optim = AdamW::default().with(&mut attn);
     optim.learning_rate = 1e-3;
 
-    let mut final_loss = f64::MAX;
+    let mut final_loss = f32::MAX;
 
     let (x, y) = make_associative_recall_dataset(batch_size, d_in);
 

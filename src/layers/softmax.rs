@@ -8,7 +8,7 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct SoftmaxCache {
-    pub softmax: Array2<f64>,
+    pub softmax: Array2<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -24,7 +24,7 @@ impl Softmax {
         }
     }
 
-    pub fn forward(&mut self, x: Array2<f64>, grad: bool) -> Array2<f64> {
+    pub fn forward(&mut self, x: Array2<f32>, grad: bool) -> Array2<f32> {
         let softmax = f::softmax(&x);
 
         if grad {
@@ -34,7 +34,7 @@ impl Softmax {
         softmax
     }
 
-    pub fn backward(&mut self, d_loss: Array2<f64>) -> Array2<f64> {
+    pub fn backward(&mut self, d_loss: Array2<f32>) -> Array2<f32> {
         f::d_softmax(&self.cache.softmax, &d_loss)
     }
 }

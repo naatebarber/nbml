@@ -15,29 +15,29 @@ pub struct GatedLinearAttention {
     d_in: usize,
     d_head: usize,
 
-    w_qkv: Array2<f64>,
-    b_qkv: Array1<f64>,
+    w_qkv: Array2<f32>,
+    b_qkv: Array1<f32>,
     layernorm: LayerNorm,
-    w_forget: Array2<f64>,
-    b_forget: Array1<f64>,
-    w_o: Array2<f64>,
-    b_o: Array1<f64>,
+    w_forget: Array2<f32>,
+    b_forget: Array1<f32>,
+    w_o: Array2<f32>,
+    b_o: Array1<f32>,
 
-    x_2d: Array2<f64>,
-    q: Array3<f64>,
-    k: Array3<f64>,
-    v: Array3<f64>,
-    forget_2d: Array2<f64>,
-    forget_gates: Array3<f64>,
-    states: Array4<f64>,
-    attn_2d: Array2<f64>,
+    x_2d: Array2<f32>,
+    q: Array3<f32>,
+    k: Array3<f32>,
+    v: Array3<f32>,
+    forget_2d: Array2<f32>,
+    forget_gates: Array3<f32>,
+    states: Array4<f32>,
+    attn_2d: Array2<f32>,
 
-    d_w_qkv: Array2<f64>,
-    d_b_qkv: Array1<f64>,
-    d_w_forget: Array2<f64>,
-    d_b_forget: Array1<f64>,
-    d_w_o: Array2<f64>,
-    d_b_o: Array1<f64>,
+    d_w_qkv: Array2<f32>,
+    d_b_qkv: Array1<f32>,
+    d_w_forget: Array2<f32>,
+    d_b_forget: Array1<f32>,
+    d_w_o: Array2<f32>,
+    d_b_o: Array1<f32>,
 }
 
 impl GatedLinearAttention {
@@ -72,7 +72,7 @@ impl GatedLinearAttention {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         let x_2d = x
@@ -182,7 +182,7 @@ impl GatedLinearAttention {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
         let (_, _, d_k, d_v) = self.states.dim();
 

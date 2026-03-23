@@ -25,7 +25,7 @@ fn learn_target_embeddings() {
         target_out.slice_mut(s![0, t, ..]).assign(&targets.row(tok));
     }
 
-    let mut loss = f64::MAX;
+    let mut loss = f32::MAX;
     for e in 0..200 {
         let out = emb.forward(tokens.clone(), true);
         let diff = &out - &target_out;
@@ -34,7 +34,7 @@ fn learn_target_embeddings() {
             println!("epoch={e} loss={loss:.6}");
         }
 
-        let d_loss = 2.0 * &diff / (4 * d_model) as f64;
+        let d_loss = 2.0 * &diff / (4 * d_model) as f32;
         emb.backward(d_loss.to_owned());
         optim.step(&mut emb);
         emb.zero_grads();

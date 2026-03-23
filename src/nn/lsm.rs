@@ -27,16 +27,16 @@ impl LSM {
 
     pub fn step(
         &mut self,
-        x: &Array2<f64>,
-        delta: f64,
-        state: &mut Array2<f64>,
+        x: &Array2<f32>,
+        delta: f32,
+        state: &mut Array2<f32>,
         grad: bool,
-    ) -> Array2<f64> {
+    ) -> Array2<f32> {
         self.reservoir.step(&x, state, delta);
         self.readout.forward(state.clone(), grad)
     }
 
-    pub fn backward(&mut self, d_loss: Array2<f64>) {
+    pub fn backward(&mut self, d_loss: Array2<f32>) {
         self.readout.backward(d_loss);
     }
 }

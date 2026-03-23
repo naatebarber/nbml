@@ -34,7 +34,7 @@ impl ESN {
         self.readout = readout;
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, _) = x.dim();
         let encoded = self.reservoir.forward(x);
 
@@ -49,12 +49,12 @@ impl ESN {
         output
     }
 
-    pub fn step(&mut self, x: &Array2<f64>, h: &mut Array2<f64>, grad: bool) -> Array2<f64> {
+    pub fn step(&mut self, x: &Array2<f32>, h: &mut Array2<f32>, grad: bool) -> Array2<f32> {
         self.reservoir.step(x, h);
         self.readout.forward(h.clone(), grad)
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) {
+    pub fn backward(&mut self, d_loss: Array3<f32>) {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         let d_loss_2d = d_loss

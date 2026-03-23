@@ -9,8 +9,8 @@ fn softmax_rows_sum_to_one() {
     let out = softmax.forward(x, false);
 
     for row in out.rows() {
-        let sum: f64 = row.sum();
-        assert!((sum - 1.0).abs() < 1e-10, "softmax row sum {sum} != 1.0");
+        let sum: f32 = row.sum();
+        assert!((sum - 1.0).abs() < 1e-5, "softmax row sum {sum} != 1.0");
     }
 }
 
@@ -41,9 +41,9 @@ fn softmax_numerically_stable_with_large_values() {
     );
 
     for row in out.rows() {
-        let sum: f64 = row.sum();
+        let sum: f32 = row.sum();
         assert!(
-            (sum - 1.0).abs() < 1e-10,
+            (sum - 1.0).abs() < 1e-5,
             "softmax row sum {sum} != 1.0 with extreme values"
         );
     }
@@ -51,7 +51,7 @@ fn softmax_numerically_stable_with_large_values() {
 
 #[test]
 fn softmax_backward_numerical_gradient_check() {
-    let eps = 1e-5;
+    let eps = 1e-3;
     let (batch, features) = (3, 5);
 
     let mut softmax = Softmax::new();
@@ -78,19 +78,19 @@ fn softmax_backward_numerical_gradient_check() {
             let out_minus = sm.forward(x_minus, false);
 
             // f = sum(g * softmax(x)), so df/dx_ij via finite diff
-            let f_plus: f64 = (&g * &out_plus).sum();
-            let f_minus: f64 = (&g * &out_minus).sum();
+            let f_plus: f32 = (&g * &out_plus).sum();
+            let f_minus: f32 = (&g * &out_minus).sum();
             numerical[[i, j]] = (f_plus - f_minus) / (2.0 * eps);
         }
     }
 
     let max_err = (&analytic - &numerical)
-        .mapv(f64::abs)
+        .mapv(f32::abs)
         .into_iter()
-        .fold(0.0f64, f64::max);
+        .fold(0.0f32, f32::max);
 
     assert!(
-        max_err < 1e-5,
+        max_err < 1e-3,
         "softmax backward gradient check failed, max error {max_err}"
     );
 }

@@ -11,7 +11,7 @@ pub struct EmbeddingCache {
 
 #[derive(Default, Debug, Clone)]
 pub struct EmbeddingGrads {
-    pub d_weights: Array2<f64>,
+    pub d_weights: Array2<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct Embedding {
     pub vocab_size: usize,
     pub d_model: usize,
 
-    pub weights: Array2<f64>,
+    pub weights: Array2<f32>,
 
     #[serde(skip)]
     pub cache: EmbeddingCache,
@@ -40,7 +40,7 @@ impl Embedding {
         }
     }
 
-    pub fn forward(&mut self, x: Array2<usize>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array2<usize>, grad: bool) -> Array3<f32> {
         let mut embedding = Array3::zeros((x.dim().0, x.dim().1, self.d_model));
 
         for b in 0..x.dim().0 {
@@ -58,7 +58,7 @@ impl Embedding {
         embedding
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) {
+    pub fn backward(&mut self, d_loss: Array3<f32>) {
         let mut d_weights = Array2::zeros(self.weights.dim());
 
         if self.grads.d_weights.dim() == (0, 0) {

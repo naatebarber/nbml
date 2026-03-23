@@ -44,7 +44,7 @@ fn delta_net_gradient_check() {
     let d_head = 4;
     let batch_size = 3;
     let seq_len = 3;
-    let eps = 1e-5;
+    let eps = 1e-3;
 
     let mut attn = DeltaNet::new(d_in, d_head);
     let x = f::xavier_normal((batch_size * seq_len, d_in))
@@ -73,7 +73,7 @@ fn delta_net_gradient_check() {
 
                 let diff = (numerical - analytical).abs();
                 assert!(
-                    diff < 1e-4,
+                    diff < 1e-3,
                     "gradient mismatch at [{},{},{}]: numerical={}, analytical={}, diff={}",
                     b,
                     s,

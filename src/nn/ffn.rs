@@ -10,20 +10,20 @@ pub type LayerDef = (usize, usize, f::Activation);
 
 #[derive(Default, Debug, Clone)]
 pub struct LayerCache {
-    pub x: Array2<f64>,
-    pub z: Array2<f64>,
+    pub x: Array2<f32>,
+    pub z: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LayerGrads {
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    pub d_w: Array2<f32>,
+    pub d_b: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Layer {
-    pub w: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w: Array2<f32>,
+    pub b: Array1<f32>,
 
     pub activation: f::Activation,
 
@@ -45,7 +45,7 @@ impl Layer {
         }
     }
 
-    pub fn forward(&mut self, x: Array2<f64>, grad: bool) -> Array2<f64> {
+    pub fn forward(&mut self, x: Array2<f32>, grad: bool) -> Array2<f32> {
         let z = x.dot(&self.w) + &self.b;
 
         if grad {
@@ -56,7 +56,7 @@ impl Layer {
         (self.activation.wake().0)(&z)
     }
 
-    pub fn backward(&mut self, d_a: Array2<f64>) -> Array2<f64> {
+    pub fn backward(&mut self, d_a: Array2<f32>) -> Array2<f32> {
         let d_z = d_a * &(self.activation.wake().1)(&self.cache.z);
         let d_w = self.cache.x.t().dot(&d_z);
         let d_b = d_z.sum_axis(Axis(0));
@@ -107,7 +107,7 @@ impl FFN {
         }
     }
 
-    pub fn forward(&mut self, mut x: Array2<f64>, grad: bool) -> Array2<f64> {
+    pub fn forward(&mut self, mut x: Array2<f32>, grad: bool) -> Array2<f32> {
         for layer in self.layers.iter_mut() {
             x = layer.forward(x, grad)
         }
@@ -115,7 +115,7 @@ impl FFN {
         x
     }
 
-    pub fn backward(&mut self, mut d_a: Array2<f64>) -> Array2<f64> {
+    pub fn backward(&mut self, mut d_a: Array2<f32>) -> Array2<f32> {
         for layer in self.layers.iter_mut().rev() {
             d_a = layer.backward(d_a);
         }

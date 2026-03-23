@@ -8,8 +8,8 @@ use crate::optim::{Param, ToIntermediates, ToParams};
 
 pub trait LinearAttentionLike: ToParams + ToIntermediates {
     fn new(d_in: usize, d_head: usize) -> Self;
-    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64>;
-    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64>;
+    fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32>;
+    fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32>;
 }
 
 impl LinearAttentionLike for LinearAttention {
@@ -17,11 +17,11 @@ impl LinearAttentionLike for LinearAttention {
         LinearAttention::new(d_in, d_head)
     }
 
-    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         self.forward(x, grad)
     }
 
-    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
     }
 }
@@ -31,11 +31,11 @@ impl LinearAttentionLike for GatedLinearAttention {
         GatedLinearAttention::new(d_in, d_head)
     }
 
-    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         self.forward(x, grad)
     }
 
-    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
     }
 }
@@ -45,11 +45,11 @@ impl LinearAttentionLike for DeltaNet {
         DeltaNet::new(d_in, d_head)
     }
 
-    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         self.forward(x, grad)
     }
 
-    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
     }
 }
@@ -59,11 +59,11 @@ impl LinearAttentionLike for GatedDeltaNet {
         GatedDeltaNet::new(d_in, d_head)
     }
 
-    fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         self.forward(x, grad)
     }
 
-    fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
     }
 }
@@ -91,7 +91,7 @@ impl<A: LinearAttentionLike> LinearTransformerBase<A> {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         let norm_x = self.norm_attn.forward(x.clone(), grad);
@@ -112,7 +112,7 @@ impl<A: LinearAttentionLike> LinearTransformerBase<A> {
         x
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         let d_loss_2d = d_loss

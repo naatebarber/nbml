@@ -216,7 +216,7 @@ fn snn_reservoir_temporal_classification() {
     for b in 0..batch_size {
         let noise = Array1::random(seq_len, Uniform::new(-0.05, 0.05));
         for t in 0..seq_len {
-            let frac = t as f64 / seq_len as f64;
+            let frac = t as f32 / seq_len as f32;
             let val = if b < samples_per_class {
                 frac + noise[t]
             } else {
@@ -272,7 +272,7 @@ fn snn_reservoir_temporal_classification() {
         }
     }
 
-    let accuracy = correct as f64 / batch_size as f64;
+    let accuracy = correct as f32 / batch_size as f32;
     println!("classification accuracy: {accuracy:.2}");
 
     assert!(
@@ -301,7 +301,7 @@ fn snn_reservoir_heterogeneous_delta() {
 
     let deltas = Array1::random(seq_len, Uniform::new(0.02, 0.3));
 
-    let mut cum_time = vec![0.0f64; seq_len + 1];
+    let mut cum_time = vec![0.0f32; seq_len + 1];
     for t in 0..seq_len {
         cum_time[t + 1] = cum_time[t] + deltas[t];
     }
@@ -315,7 +315,7 @@ fn snn_reservoir_heterogeneous_delta() {
         for t in 0..seq_len {
             let frac = cum_time[t + 1] / total_time;
             let val = if b < samples_per_class {
-                (2.0 * std::f64::consts::PI * frac).sin() + noise[t]
+                (2.0 * std::f32::consts::PI * frac).sin() + noise[t]
             } else {
                 (1.0 - frac) + noise[t]
             };
@@ -369,7 +369,7 @@ fn snn_reservoir_heterogeneous_delta() {
         }
     }
 
-    let accuracy = correct as f64 / batch_size as f64;
+    let accuracy = correct as f32 / batch_size as f32;
     println!("heterogeneous delta accuracy: {accuracy:.2}");
 
     assert!(

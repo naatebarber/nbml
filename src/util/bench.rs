@@ -3,11 +3,11 @@ use ndarray::Array1;
 pub struct Bench {}
 
 impl Bench {
-    pub fn mse(y_true: &Array1<f64>, y_pred: &Array1<f64>) -> f64 {
+    pub fn mse(y_true: &Array1<f32>, y_pred: &Array1<f32>) -> f32 {
         (y_true - y_pred).mapv(|v| v.powi(2)).mean().unwrap()
     }
 
-    pub fn nmse(y_true: &Array1<f64>, y_pred: &Array1<f64>) -> f64 {
+    pub fn nmse(y_true: &Array1<f32>, y_pred: &Array1<f32>) -> f32 {
         let mse_val = Bench::mse(y_true, y_pred);
         let var_y = (y_true - y_true.mean().unwrap())
             .mapv(|v| v.powi(2))
@@ -16,11 +16,11 @@ impl Bench {
         mse_val / var_y
     }
 
-    pub fn r2(y_true: &Array1<f64>, y_pred: &Array1<f64>) -> f64 {
+    pub fn r2(y_true: &Array1<f32>, y_pred: &Array1<f32>) -> f32 {
         1.0 - Bench::nmse(y_true, y_pred)
     }
 
-    pub fn pearson_r(y_true: &Array1<f64>, y_pred: &Array1<f64>) -> f64 {
+    pub fn pearson_r(y_true: &Array1<f32>, y_pred: &Array1<f32>) -> f32 {
         let y_true_centered = y_true - y_true.mean().unwrap();
         let y_pred_centered = y_pred - y_pred.mean().unwrap();
         let numerator = (y_true_centered.clone() * y_pred_centered.clone())
@@ -32,7 +32,7 @@ impl Bench {
         numerator / denom
     }
 
-    pub fn score(y_true: &Array1<f64>, y_pred: &Array1<f64>) {
+    pub fn score(y_true: &Array1<f32>, y_pred: &Array1<f32>) {
         let mse_val = Bench::mse(&y_true, &y_pred);
         let nmse_val = Bench::nmse(&y_true, &y_pred);
         let r2_val = Bench::r2(&y_true, &y_pred);

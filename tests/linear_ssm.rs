@@ -38,7 +38,7 @@ fn intermediate_caching() {
     );
 }
 
-fn generate_linear_recurrence(batch: usize, len: usize, feat: usize) -> Array3<f64> {
+fn generate_linear_recurrence(batch: usize, len: usize, feat: usize) -> Array3<f32> {
     let seed = Array3::random((batch, 2, feat), Uniform::new(-1., 1.));
     let rest = Array3::zeros((batch, len - 2, feat));
     let mut seq = concatenate![Axis(1), seed.view(), rest.view()];

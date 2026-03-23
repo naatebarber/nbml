@@ -39,7 +39,7 @@ impl Transformer {
         Transformer::new(d_in, d_head, n_head, true)
     }
 
-    pub fn pad_mask(&self, pad_mask: Array2<f64>) -> Array3<f64> {
+    pub fn pad_mask(&self, pad_mask: Array2<f32>) -> Array3<f32> {
         let (batch_size, seq_len) = pad_mask.dim();
 
         let attn_mask = pad_mask
@@ -51,7 +51,7 @@ impl Transformer {
         attn_mask
     }
 
-    pub fn causal_mask(&self, batch_size: usize, seq_len: usize) -> Array3<f64> {
+    pub fn causal_mask(&self, batch_size: usize, seq_len: usize) -> Array3<f32> {
         let mut attn_mask = Array2::zeros((seq_len, seq_len));
 
         attn_mask.indexed_iter_mut().for_each(|((y, x), v)| {
@@ -67,7 +67,7 @@ impl Transformer {
             .to_owned()
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, pad_mask: Array2<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, pad_mask: Array2<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         let norm_x = self.norm_attn.forward(x.clone(), grad);
@@ -94,7 +94,7 @@ impl Transformer {
         x
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         let d_loss_2d = d_loss

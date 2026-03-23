@@ -68,7 +68,7 @@ fn identity() {
     for epoch in 0..2000 {
         let y_pred = transformer.forward(x.clone(), true);
         let loss = (&y_pred - &y_target).mapv(|v| v.powi(2)).mean().unwrap();
-        let d_loss = 2. * (&y_pred - &y_target) / (y_pred.len() as f64);
+        let d_loss = 2. * (&y_pred - &y_target) / (y_pred.len() as f32);
 
         transformer.backward(d_loss);
         optim.step(&mut transformer);
@@ -124,7 +124,7 @@ pub fn mean_pooling() {
     for epoch in 0..3000 {
         let y_pred = transformer2.forward(x2.clone(), true);
         let loss = (&y_pred - &y_target2).mapv(|v| v.powi(2)).mean().unwrap();
-        let d_loss = 2. * (&y_pred - &y_target2) / (y_pred.len() as f64);
+        let d_loss = 2. * (&y_pred - &y_target2) / (y_pred.len() as f32);
 
         transformer2.backward(d_loss);
         optim2.step(&mut transformer2);
@@ -174,8 +174,8 @@ fn gradient_flow() {
     // Check gradient statistics
     let grad_mean = dx.mean().unwrap();
     let grad_std = dx.std(0.);
-    let grad_max = dx.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-    let grad_min = dx.iter().cloned().fold(f64::INFINITY, f64::min);
+    let grad_max = dx.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let grad_min = dx.iter().cloned().fold(f32::INFINITY, f32::min);
 
     println!("  Gradient statistics:");
     println!("    Mean: {:.6}", grad_mean);
@@ -220,7 +220,7 @@ fn overfitting() {
     for epoch in 0..5000 {
         let y_pred = transformer.forward(x.clone(), true);
         let loss = (&y_pred - &y_target).mapv(|v| v.powi(2)).mean().unwrap();
-        let d_loss = 2. * (&y_pred - &y_target) / (y_pred.len() as f64);
+        let d_loss = 2. * (&y_pred - &y_target) / (y_pred.len() as f32);
 
         transformer.backward(d_loss);
         optim.step(&mut transformer);
@@ -343,7 +343,7 @@ fn fixed_position_retrieval() {
 
     let mut final_loss = 0.;
     for e in 0..2000 {
-        let vectors: Vec<Array1<f64>> = (0..5)
+        let vectors: Vec<Array1<f32>> = (0..5)
             .map(|_| Array1::random(16, Uniform::new(0., 1.)))
             .collect();
 
@@ -406,7 +406,7 @@ fn delayed_copy_single_token() {
 
     let mut final_loss = 0.;
     for e in 0..3000 {
-        let vectors: Vec<Array1<f64>> = (0..5)
+        let vectors: Vec<Array1<f32>> = (0..5)
             .map(|_| Array1::random(16, Uniform::new(0., 1.)))
             .collect();
 
@@ -464,7 +464,7 @@ fn memorize_one_delayed_copy() {
     let pe = positional_encoding_seq(10, 16).insert_axis(Axis(0));
 
     // Fixed vectors - same every epoch
-    let vectors: Vec<Array1<f64>> = (0..5)
+    let vectors: Vec<Array1<f32>> = (0..5)
         .map(|_| Array1::random(16, Uniform::new(0., 1.)))
         .collect();
 
@@ -479,7 +479,7 @@ fn memorize_one_delayed_copy() {
         y.slice_mut(s![0, i + 5, ..]).assign(v);
     }
 
-    let mut final_loss = f64::MAX;
+    let mut final_loss = f32::MAX;
 
     for e in 0..5000 {
         let y_pred = model.forward(x_pe.clone(), true);

@@ -9,19 +9,19 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearCache {
-    pub x: Array2<f64>,
+    pub x: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearGrads {
-    pub d_w: Array2<f64>,
-    pub d_b: Array1<f64>,
+    pub d_w: Array2<f32>,
+    pub d_b: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Linear {
-    pub w: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w: Array2<f32>,
+    pub b: Array1<f32>,
 
     #[serde(skip)]
     pub cache: LinearCache,
@@ -50,7 +50,7 @@ impl Linear {
         }
     }
 
-    pub fn forward(&mut self, x: Array2<f64>, grad: bool) -> Array2<f64> {
+    pub fn forward(&mut self, x: Array2<f32>, grad: bool) -> Array2<f32> {
         if grad {
             self.cache.x = x.clone();
         }
@@ -58,7 +58,7 @@ impl Linear {
         x.dot(&self.w) + &self.b
     }
 
-    pub fn backward(&mut self, d_loss: Array2<f64>) -> Array2<f64> {
+    pub fn backward(&mut self, d_loss: Array2<f32>) -> Array2<f32> {
         if self.grads.d_w.dim() == (0, 0) {
             self.grads.d_w = Array2::zeros(self.w.dim());
         }

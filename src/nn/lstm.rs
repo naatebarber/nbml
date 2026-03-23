@@ -8,27 +8,27 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct LSTMCache {
-    pub x: Array3<f64>,
-    pub states: Array3<f64>,
-    pub preactivations: Array3<f64>,
-    pub gates: Array3<f64>,
-    pub cells: Array3<f64>,
+    pub x: Array3<f32>,
+    pub states: Array3<f32>,
+    pub preactivations: Array3<f32>,
+    pub gates: Array3<f32>,
+    pub cells: Array3<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LSTMGrads {
-    pub d_wi: Array2<f64>,
-    pub d_wr: Array2<f64>,
-    pub d_b: Array1<f64>,
+    pub d_wi: Array2<f32>,
+    pub d_wr: Array2<f32>,
+    pub d_b: Array1<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LSTM {
     pub d_model: usize,
 
-    pub w_i: Array2<f64>,
-    pub w_r: Array2<f64>,
-    pub b: Array1<f64>,
+    pub w_i: Array2<f32>,
+    pub w_r: Array2<f32>,
+    pub b: Array1<f32>,
 
     #[serde(skip)]
     pub cache: LSTMCache,
@@ -54,7 +54,7 @@ impl LSTM {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         assert!(features == self.d_model, "feature dimension != d_model");
@@ -119,7 +119,7 @@ impl LSTM {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
 
         if self.grads.d_wi.dim() == (0, 0) {
@@ -205,7 +205,7 @@ impl LSTM {
         d_x
     }
 
-    pub fn step(&self, x: &Array2<f64>, h: &mut Array2<f64>, cell: &mut Array2<f64>) {
+    pub fn step(&self, x: &Array2<f32>, h: &mut Array2<f32>, cell: &mut Array2<f32>) {
         assert!(
             self.d_model == x.dim().1 && x.dim() == h.dim() && h.dim() == cell.dim(),
             "dimension mismatch, d_model={} d_x={:?} d_h={:?} d_cell={:?}",
@@ -237,7 +237,7 @@ impl LSTM {
         *h = &output_gate * f::tanh(&cell);
     }
 
-    pub fn step_forward(&mut self, x: &Array2<f64>, h: &mut Array2<f64>, cell: &mut Array2<f64>) {
+    pub fn step_forward(&mut self, x: &Array2<f32>, h: &mut Array2<f32>, cell: &mut Array2<f32>) {
         let (batch_size, features) = x.dim();
 
         assert!(

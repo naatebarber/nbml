@@ -29,7 +29,7 @@ pub fn main() {
         let loss = (&y_pred - &y).mapv(|v| v.powi(2)).mean().unwrap();
 
         // Backward pass: dL/dy = 2*(y_pred - y)/N
-        let d_loss = 2.0 * (&y_pred - &y) / (y.shape()[0] as f64);
+        let d_loss = 2.0 * (&y_pred - &y) / (y.shape()[0] as f32);
         net.backward(d_loss);
 
         // Update

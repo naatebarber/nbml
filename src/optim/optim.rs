@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 pub struct Param {
-    pub target: Option<RawArrayViewMut<f64, IxDyn>>,
-    pub grad: Option<RawArrayViewMut<f64, IxDyn>>,
+    pub target: Option<RawArrayViewMut<f32, IxDyn>>,
+    pub grad: Option<RawArrayViewMut<f32, IxDyn>>,
     pub enable_weight_decay: bool,
 }
 
@@ -21,7 +21,7 @@ impl Default for Param {
 impl Param {
     pub fn new<S, D>(target: &mut ArrayBase<S, D>) -> Self
     where
-        S: DataMut<Elem = f64>,
+        S: DataMut<Elem = f32>,
         D: Dimension,
     {
         let mut param = Param::default();
@@ -31,7 +31,7 @@ impl Param {
 
     pub fn with_grad<S, D>(mut self, grad: &mut ArrayBase<S, D>) -> Self
     where
-        S: DataMut<Elem = f64>,
+        S: DataMut<Elem = f32>,
         D: Dimension,
     {
         self.grad = Some(grad.raw_view_mut().into_dyn());
@@ -58,19 +58,19 @@ pub trait ToParams {
 }
 
 pub trait Intermediate {
-    fn stash(&self) -> ArrayD<f64>;
-    fn apply(&mut self, stashed: ArrayD<f64>);
+    fn stash(&self) -> ArrayD<f32>;
+    fn apply(&mut self, stashed: ArrayD<f32>);
     fn clear(&mut self);
 }
 
-pub type IntermediateCache = Vec<ArrayD<f64>>;
+pub type IntermediateCache = Vec<ArrayD<f32>>;
 
-impl<D: Dimension> Intermediate for Array<f64, D> {
-    fn stash(&self) -> ArrayD<f64> {
+impl<D: Dimension> Intermediate for Array<f32, D> {
+    fn stash(&self) -> ArrayD<f32> {
         self.clone().into_dyn()
     }
 
-    fn apply(&mut self, stashed: ArrayD<f64>) {
+    fn apply(&mut self, stashed: ArrayD<f32>) {
         *self = stashed.into_dimensionality().unwrap();
     }
 
@@ -84,14 +84,14 @@ pub trait ToIntermediates {
         vec![]
     }
 
-    fn stash_intermediates(&mut self) -> Vec<ArrayD<f64>> {
+    fn stash_intermediates(&mut self) -> Vec<ArrayD<f32>> {
         self.intermediates()
             .into_iter()
             .map(|i| i.stash())
             .collect()
     }
 
-    fn apply_intermediates(&mut self, intermediates_b: Vec<ArrayD<f64>>) {
+    fn apply_intermediates(&mut self, intermediates_b: Vec<ArrayD<f32>>) {
         self.intermediates()
             .into_iter()
             .zip(intermediates_b.into_iter())

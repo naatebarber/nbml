@@ -1,6 +1,5 @@
 use nbml::{
-    nn::LSTM,
-    optim::{AdamW, Optimizer, ToIntermediates, ToParams},
+    f, nn::LSTM, optim::{AdamW, Optimizer, ToIntermediates, ToParams}
 };
 use ndarray::{Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
@@ -37,6 +36,55 @@ fn intermediate_caching() {
     );
 }
 
+
+#[test]
+fn delta_net_gradient_check() {
+    let d_in = 4;
+    let batch_size = 3;
+    let seq_len = 3;
+    let eps = 1e-3;
+
+    let mut lstm = LSTM::new(d_in);
+    let x = f::xavier_normal((batch_size * seq_len, d_in))
+        .into_shape_clone((batch_size, seq_len, d_in))
+        .unwrap();
+
+    let out = lstm.forward(x.clone(), true);
+    let d_loss = Array3::ones(out.dim());
+    let d_x = lstm.backward(d_loss.clone());
+
+    for b in 0..batch_size {
+        for s in 0..seq_len {
+            for f in 0..d_in {
+                let mut x_plus = x.clone();
+                let mut x_minus = x.clone();
+                x_plus[[b, s, f]] += eps;
+                x_minus[[b, s, f]] -= eps;
+
+                let mut lstm_plus = lstm.clone();
+                let mut lstm_minus = lstm.clone();
+                let out_plus = lstm_plus.forward(x_plus, false);
+                let out_minus = lstm_minus.forward(x_minus, false);
+
+                let numerical = (&out_plus - &out_minus).sum() / (2.0 * eps);
+                let analytical = d_x[[b, s, f]];
+
+                let diff = (numerical - analytical).abs();
+                assert!(
+                    diff < 1e-3,
+                    "gradient mismatch at [{},{},{}]: numerical={}, analytical={}, diff={}",
+                    b,
+                    s,
+                    f,
+                    numerical,
+                    analytical,
+                    diff
+                );
+            }
+        }
+    }
+}
+
 #[test]
 fn lstm_forward_and_step_compute_same_value() {
     let mut lstm = LSTM::new(12);
@@ -60,7 +108,7 @@ fn lstm_forward_and_step_compute_same_value() {
 
 #[test]
 fn lstm_sequence_pred() {
-    let batch_size = 10;
+    let batch_size = 20;
     let seq_len = 10;
     let features = 10;
 

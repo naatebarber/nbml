@@ -5,8 +5,8 @@ use crate::optim::{ToIntermediates, ToParams};
 
 #[derive(Default, Debug, Clone)]
 pub struct SequencePoolingCache {
-    pub mask: Array2<f64>,
-    pub seq_lens: Array2<f64>,
+    pub mask: Array2<f32>,
+    pub seq_lens: Array2<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -22,7 +22,7 @@ impl SequencePooling {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, mask: Array2<f64>, grad: bool) -> Array2<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, mask: Array2<f32>, grad: bool) -> Array2<f32> {
         let seq_lens = mask.sum_axis(Axis(1)).insert_axis(Axis(1));
 
         if grad {
@@ -35,7 +35,7 @@ impl SequencePooling {
         &x_sums / &seq_lens
     }
 
-    pub fn backward(&mut self, d_loss: Array2<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array2<f32>) -> Array3<f32> {
         let (batch_size, features) = d_loss.dim();
         let (.., seq_len) = self.cache.mask.dim();
 

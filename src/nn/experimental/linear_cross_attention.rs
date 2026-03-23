@@ -8,19 +8,19 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearCrossAttentionCache {
-    pub x_q_2d: Array2<f64>,
-    pub x_kv_2d: Array2<f64>,
-    pub q: Array3<f64>,
-    pub k: Array3<f64>,
-    pub v: Array3<f64>,
-    pub states: Array4<f64>,
+    pub x_q_2d: Array2<f32>,
+    pub x_kv_2d: Array2<f32>,
+    pub q: Array3<f32>,
+    pub k: Array3<f32>,
+    pub v: Array3<f32>,
+    pub states: Array4<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearCrossAttentionGrads {
-    pub d_w_q: Array2<f64>,
-    pub d_w_k: Array2<f64>,
-    pub d_w_v: Array2<f64>,
+    pub d_w_q: Array2<f32>,
+    pub d_w_k: Array2<f32>,
+    pub d_w_v: Array2<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -28,9 +28,9 @@ pub struct LinearCrossAttention {
     pub d_in: usize,
     pub d_head: usize,
 
-    pub w_q: Array2<f64>,
-    pub w_k: Array2<f64>,
-    pub w_v: Array2<f64>,
+    pub w_q: Array2<f32>,
+    pub w_k: Array2<f32>,
+    pub w_v: Array2<f32>,
 
     #[serde(skip)]
     pub cache: LinearCrossAttentionCache,
@@ -53,7 +53,7 @@ impl LinearCrossAttention {
         }
     }
 
-    pub fn forward(&mut self, x_q: Array3<f64>, x_kv: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x_q: Array3<f32>, x_kv: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len_q, features) = x_q.dim();
         let (_, seq_len_kv, _) = x_kv.dim();
 
@@ -124,7 +124,7 @@ impl LinearCrossAttention {
         outputs
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> (Array3<f64>, Array3<f64>) {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> (Array3<f32>, Array3<f32>) {
         let (batch_size, seq_len_q, features) = d_loss.dim();
         let (seq_len_kv_plus1, _, d_k, d_v) = self.cache.states.dim();
         let seq_len_kv = seq_len_kv_plus1 - 1;

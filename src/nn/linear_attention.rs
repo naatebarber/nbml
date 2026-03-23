@@ -8,20 +8,20 @@ use crate::{
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearAttentionCache {
-    pub x_2d: Array2<f64>,
-    pub q: Array3<f64>,
-    pub k: Array3<f64>,
-    pub v: Array3<f64>,
-    pub states: Array4<f64>,
-    pub attn_2d: Array2<f64>,
+    pub x_2d: Array2<f32>,
+    pub q: Array3<f32>,
+    pub k: Array3<f32>,
+    pub v: Array3<f32>,
+    pub states: Array4<f32>,
+    pub attn_2d: Array2<f32>,
 }
 
 #[derive(Default, Debug, Clone)]
 pub struct LinearAttentionGrads {
-    pub d_w_qkv: Array2<f64>,
-    pub d_b_qkv: Array1<f64>,
-    pub d_w_o: Array2<f64>,
-    pub d_b_o: Array1<f64>,
+    pub d_w_qkv: Array2<f32>,
+    pub d_b_qkv: Array1<f32>,
+    pub d_w_o: Array2<f32>,
+    pub d_b_o: Array1<f32>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -29,10 +29,10 @@ pub struct LinearAttention {
     pub d_in: usize,
     pub d_head: usize,
 
-    pub w_qkv: Array2<f64>,
-    pub b_qkv: Array1<f64>,
-    pub w_o: Array2<f64>,
-    pub b_o: Array1<f64>,
+    pub w_qkv: Array2<f32>,
+    pub b_qkv: Array1<f32>,
+    pub w_o: Array2<f32>,
+    pub b_o: Array1<f32>,
 
     #[serde(skip)]
     pub cache: LinearAttentionCache,
@@ -56,7 +56,7 @@ impl LinearAttention {
         }
     }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array3<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
         let (batch_size, seq_len, features) = x.dim();
 
         let x_2d = x
@@ -125,7 +125,7 @@ impl LinearAttention {
         output
     }
 
-    pub fn backward(&mut self, d_loss: Array3<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
         let (_, _, d_k, d_v) = self.cache.states.dim();
 

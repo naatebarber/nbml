@@ -86,11 +86,11 @@ Layers that are only useful as components of other modules:
 
 ```rust
 pub struct Affine {
-    w: Array2<f64>,
-    b: Array1<f64>,
+    w: Array2<f32>,
+    b: Array1<f32>,
 
-    d_w: Array2<f64>,
-    d_b: Array1<f64>,
+    d_w: Array2<f32>,
+    d_b: Array1<f32>,
 }
 
 impl ToParams for Affine {
@@ -213,7 +213,7 @@ pub struct SequenceClassifier {
 impl SequenceClassifier {
     pub fn new(d_model: usize) -> Self { ... }
 
-    pub fn forward(&mut self, x: Array3<f64>, grad: bool) -> Array2<f64> {
+    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array2<f32> {
         // on-the-spot mask
         let mask = Array3::ones((x.dim().0, x.dim().1, x.dim().1));
         let x = self.transformer.forward(x, mask.clone(), grad); // (B, S, D)
@@ -223,7 +223,7 @@ impl SequenceClassifier {
         x
     }
 
-    pub fn backward(&mut self, d_loss: Array2<f64>) -> Array3<f64> {
+    pub fn backward(&mut self, d_loss: Array2<f32>) -> Array3<f32> {
         let d_loss = self.readout.backward(d_loss); // (B, D)
         let d_loss = self.pooling.backward(d_loss); // (B, S, D)
         let d_loss = self.transformer.backward(d_loss); // (B, S, D)

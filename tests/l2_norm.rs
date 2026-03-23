@@ -4,7 +4,7 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
 fn l2_norm_backward_numerical_gradient_check() {
-    let eps = 1e-5;
+    let eps = 1e-3;
     let (batch, features) = (3, 5);
 
     let mut l2_norm = L2Norm::new();
