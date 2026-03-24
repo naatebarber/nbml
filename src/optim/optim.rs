@@ -4,8 +4,8 @@ use std::{error::Error, fmt::Debug, fs, path::PathBuf};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TensorData {
-    data: Vec<f32>,
-    shape: Vec<usize>,
+    pub data: Vec<f32>,
+    pub shape: Vec<usize>,
 }
 
 pub struct Param {

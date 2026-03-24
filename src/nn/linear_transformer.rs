@@ -55,7 +55,7 @@ impl LinearAttentionLike for DeltaNet {
 
 impl LinearAttentionLike for GatedDeltaNet {
     fn new(d_in: usize, d_head: usize) -> Self {
-        GatedDeltaNet::new(d_in, d_head)
+        GatedDeltaNet::new(d_in, d_head, d_head)
     }
 
     fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {

@@ -3,12 +3,12 @@ use nbml::{
     nn::GatedDeltaNet,
     optim::{ToIntermediates, ToParams},
 };
-use ndarray::Array3;
+use ndarray::{Array2, Array3, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
 fn gated_delta_net_intermediate_caching() {
-    let mut model = GatedDeltaNet::new(4, 4);
+    let mut model = GatedDeltaNet::new(4, 4, 4);
     let x = Array3::random((2, 3, 4), Uniform::new(0., 1.));
     let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.));
     let d = Array3::ones((2, 3, 4));
@@ -46,7 +46,7 @@ fn gated_delta_net_gradient_check() {
     let seq_len = 3;
     let eps = 1e-3;
 
-    let mut attn = GatedDeltaNet::new(d_in, d_head);
+    let mut attn = GatedDeltaNet::new(d_in, d_head, d_head);
     let x = f::xavier_normal((batch_size * seq_len, d_in))
         .into_shape_clone((batch_size, seq_len, d_in))
         .unwrap();
@@ -85,4 +85,25 @@ fn gated_delta_net_gradient_check() {
             }
         }
     }
+}
+
+#[test]
+fn forward_and_step_compute_same_value() {
+    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.));
+
+    let mut gdn = GatedDeltaNet::new(16, 32, 16);
+    let y_forward = gdn.forward(x.clone(), false);
+    let y_forward = y_forward.slice(s![.., -1, ..]).to_owned();
+
+    let mut state = Array3::zeros((5, 32, 32));
+    let mut y_step = Array2::zeros((5, 16));
+    for t in 0..x.dim().1 {
+        let x_t = x.slice(s![.., t, ..]).to_owned();
+        y_step = gdn.step(&x_t, &mut state);
+    }
+
+    assert!(
+        y_forward == y_step,
+        "forward and step compute different values"
+    );
 }

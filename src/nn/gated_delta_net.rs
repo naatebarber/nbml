@@ -6,10 +6,6 @@ use crate::{
     optim::{Param, ToIntermediates, ToParams},
 };
 
-// TODO l2 normalize k after linear projection
-// TODO l2 normalize q after linear projection
-// TODO change w/b_beta to w/b_alphabeta and use alpha for global decay
-
 #[derive(Default, Debug, Clone)]
 pub struct GatedDeltaNetCache {
     pub x_2d: Array2<f32>,
@@ -40,6 +36,7 @@ pub struct GatedDeltaNetGrads {
 pub struct GatedDeltaNet {
     pub d_in: usize,
     pub d_head: usize,
+    pub d_out: usize,
 
     pub w_qkv: Array2<f32>,
     pub b_qkv: Array1<f32>,
@@ -55,17 +52,18 @@ pub struct GatedDeltaNet {
 }
 
 impl GatedDeltaNet {
-    pub fn new(d_in: usize, d_head: usize) -> Self {
+    pub fn new(d_in: usize, d_head: usize, d_out: usize) -> Self {
         Self {
             d_in,
             d_head,
+            d_out,
 
             w_qkv: f::xavier_normal((d_in, 3 * d_head)),
             b_qkv: Array1::zeros(3 * d_head),
             w_ab: f::xavier_normal((d_in, 2)),
             b_ab: Array1::zeros(2),
-            w_o: f::xavier_normal((d_head, d_in)),
-            b_o: Array1::zeros(d_in),
+            w_o: f::xavier_normal((d_head, d_out)),
+            b_o: Array1::zeros(d_out),
 
             cache: GatedDeltaNetCache::default(),
             grads: GatedDeltaNetGrads::default(),
@@ -165,7 +163,7 @@ impl GatedDeltaNet {
             .unwrap();
         let output_2d = attn_2d.dot(&self.w_o) + &self.b_o;
         let output = output_2d
-            .into_shape_clone((batch_size, seq_len, self.d_in))
+            .into_shape_clone((batch_size, seq_len, self.d_out))
             .unwrap();
 
         if grad {
@@ -343,6 +341,49 @@ impl GatedDeltaNet {
 
         d_x
     }
+
+    pub fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        let (batch_size, _) = x.dim();
+
+        let qkv = x.dot(&self.w_qkv) + &self.b_qkv;
+        let qkv = qkv
+            .into_shape_clone((batch_size, 3, self.d_head))
+            .unwrap()
+            .permuted_axes([1, 0, 2])
+            .to_owned();
+
+        let q_preactivations = qkv.slice(s![0, .., ..]).to_owned();
+        let k_preactivations = qkv.slice(s![1, .., ..]).to_owned();
+        let v = qkv.slice(s![2, .., ..]);
+
+        let q = f::l2_norm(&q_preactivations);
+        let k = f::l2_norm(&k_preactivations);
+
+        let ab_preactivations = x.dot(&self.w_ab) + &self.b_ab;
+        let ab = f::sigmoid(&ab_preactivations);
+
+        let alpha = ab.slice(s![.., 0..1]).insert_axis(Axis(2));
+        let beta = ab.slice(s![.., 1..2]).insert_axis(Axis(2));
+
+        let alpha = alpha.broadcast(state.dim()).unwrap();
+        let beta = beta.broadcast(state.dim()).unwrap();
+
+        let k = k.insert_axis(Axis(2));
+
+        let r = (&(*state) * &k).sum_axis(Axis(1));
+        let error = &v - &r;
+        let update = &k * &error.insert_axis(Axis(1));
+
+        *state = &alpha * &(*state) + &beta * &update;
+
+        // (B, d_q) -> (B, d_q, 1)
+        let q_t_inner = q.insert_axis(Axis(2));
+        let attn = (&q_t_inner * &(*state)).sum_axis(Axis(1));
+
+        let output = attn.dot(&self.w_o) + &self.b_o;
+
+        output
+    }
 }
 
 impl ToParams for GatedDeltaNet {
@@ -362,6 +403,8 @@ impl ToIntermediates for GatedDeltaNet {
     fn intermediates(&mut self) -> Vec<&mut dyn crate::optim::Intermediate> {
         vec![
             &mut self.cache.x_2d,
+            &mut self.cache.q_preactivations,
+            &mut self.cache.k_preactivations,
             &mut self.cache.q,
             &mut self.cache.k,
             &mut self.cache.v,
