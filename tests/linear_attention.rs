@@ -3,7 +3,7 @@ use nbml::{
     nn::{GatedLinearAttention, LinearAttention},
     optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
-use ndarray::{Array1, Array3, s};
+use ndarray::{Array1, Array2, Array3, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use rand::{rng, seq::IteratorRandom};
 
@@ -214,6 +214,27 @@ fn linear_attention_associative_recall() {
     assert!(
         final_loss < max_loss,
         "linear self attention failed associative recall with loss {final_loss} > {max_loss}"
+    );
+}
+
+#[test]
+fn linear_attention_forward_and_step_compute_same_value() {
+    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.));
+
+    let mut attn = LinearAttention::new(16, 32);
+    let y_forward = attn.forward(x.clone(), false);
+    let y_forward = y_forward.slice(s![.., -1, ..]).to_owned();
+
+    let mut state = Array3::zeros((5, 32, 32));
+    let mut y_step = Array2::zeros((5, 16));
+    for t in 0..x.dim().1 {
+        let x_t = x.slice(s![.., t, ..]).to_owned();
+        y_step = attn.step(&x_t, &mut state);
+    }
+
+    assert!(
+        y_forward == y_step,
+        "forward and step compute different values"
     );
 }
 

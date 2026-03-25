@@ -125,6 +125,34 @@ impl LinearAttention {
         output
     }
 
+    pub fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        let (batch_size, _) = x.dim();
+
+        let qkv = x.dot(&self.w_qkv) + &self.b_qkv;
+        let qkv = qkv
+            .into_shape_clone((batch_size, 3, self.d_head))
+            .unwrap()
+            .permuted_axes([1, 0, 2])
+            .to_owned();
+
+        let q = qkv.slice(s![0, .., ..]);
+        let k = qkv.slice(s![1, .., ..]);
+        let v = qkv.slice(s![2, .., ..]);
+
+        // (B, d_k, 1) * (B, 1, d_v) -> (B, d_k, d_v)
+        let k_inner = k.insert_axis(Axis(2));
+        let v_outer = v.insert_axis(Axis(1));
+        *state = &(*state) + &k_inner * &v_outer;
+
+        // (B, d_q, 1) * (B, d_k, d_v) -> sum over d_k -> (B, d_v)
+        let q_inner = q.insert_axis(Axis(2));
+        let attn: Array2<f32> = (&q_inner * &(*state)).sum_axis(Axis(1));
+
+        let output = attn.dot(&self.w_o) + &self.b_o;
+
+        output
+    }
+
     pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         let (batch_size, seq_len, features) = d_loss.dim();
         let (_, _, d_k, d_v) = self.cache.states.dim();
