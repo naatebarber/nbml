@@ -24,7 +24,3 @@ blas = ["ndarray/blas"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 blas-src = { version = "0.14", features = ["accelerate"] }
-
-[target.'cfg(not(target_os = "macos"))'.dependencies]
-blas-src = { version = "0.14", features = ["openblas"] }
-openblas-src = { version = "0.10", features = ["cblas", "system"] }
