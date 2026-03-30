@@ -44,8 +44,9 @@ for batch in training_data {
 
 - **`Layer`**: Single nonlinear projection layer
 - **`FFN`**: Feedforward network with configurable layers
-- **`LSTM`**: Long Short-Term Memory Network
 - **`RNN`**: Vanilla recurrent neural network
+- **`LSTM`**: Long Short-Term Memory Network
+- **`GRU`**: Gated Recurrent Unit
 - **`ESN`**: Echo-state network, fixed recurrence + readout
 - **`LSM`**: Liquid state machine
 - **`RNNReservoir`**: RNN reservoir (used by ESN)
