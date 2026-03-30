@@ -124,6 +124,16 @@ impl RNN {
 
         d_x
     }
+
+    pub fn step(&self, x: &Array2<f32>, state: &mut Array2<f32>) -> Array2<f32> {
+        let x_i = x.dot(&self.w_i);
+        let r = state.dot(&self.w_r);
+
+        let preactivatons = &x_i + &r + &self.b;
+        *state = f::tanh(&preactivatons);
+
+        state.clone()
+    }
 }
 
 impl ToParams for RNN {
