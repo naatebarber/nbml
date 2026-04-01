@@ -71,6 +71,8 @@ for batch in training_data {
 
 Layers that are only useful as components of other modules:
 
+- **`Dropout`**: Stateful dropout layer
+- **`Embedding`**: Learnable token embeddings
 - **`L2Norm`**: L2 normalization
 - **`Linear`**: Affine transformation
 - **`Softmax`**: Row-wise softmax
