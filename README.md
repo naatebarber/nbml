@@ -78,6 +78,7 @@ Layers that are only useful as components of other modules:
 - **`Softmax`**: Row-wise softmax
 - **`LayerNorm`**: Layer normalization
 - **`SequencePooling`**: Sequence mean-pooling
+- **`LastTokenPooling`**: Last-token pooling, selects last token output only. For causal tasks.
 
 ### Optimizers (`nbml::optim`)
 
