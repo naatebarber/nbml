@@ -1,9 +1,9 @@
 use nbml::{
-    f,
+    f::{self, causal_mask},
     nn::{Attention, CrossAttention, SelfAttention},
     optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{Array1, Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use rand::{rng, seq::IteratorRandom};
 
@@ -243,6 +243,109 @@ fn cross_attention_gradient_check() {
             }
         }
     }
+}
+
+#[test]
+fn kv_caching() {
+    let batch_size = 5;
+    let seq_len = 10;
+    let d_model = 5;
+    let d_head = 2;
+    let n_head = 2;
+
+    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+
+    let mask = causal_mask(10)
+        .insert_axis(Axis(0))
+        .broadcast((5, 10, 10))
+        .unwrap()
+        .to_owned();
+
+    let mut model = SelfAttention::new(d_model, d_head, n_head);
+
+    let y_immediate = model.forward(x.clone(), mask.clone(), false);
+
+    let mut k = Array3::zeros((batch_size * n_head, 0, d_head));
+    let mut v = Array3::zeros((batch_size * n_head, 0, d_head));
+    let mut y_stepped = Array3::zeros((batch_size, 0, d_model));
+
+    for t in 0..x.dim().1 {
+        let x_t = x.slice(s![.., t, ..]).to_owned().insert_axis(Axis(1));
+        let mask = Array3::ones((batch_size, 1, k.dim().1 + 1));
+
+        println!("mask dim {:?}", mask.dim());
+
+        let y_t = model.forward_cached(x_t, mask, &mut k, &mut v);
+        y_stepped = concatenate![Axis(1), y_stepped.view(), y_t.view()];
+    }
+
+    let soft_eq = (&y_stepped - &y_immediate)
+        .mapv(|x| x.abs() < 1e-5)
+        .iter()
+        .all(|&b| b);
+
+    assert!(
+        soft_eq,
+        "full forward and kv cached forward diverge in computation\n{y_immediate:?}\n{y_stepped:?}"
+    )
+}
+
+#[test]
+fn kv_caching_2() {
+    let batch_size = 5;
+    let seq_len = 10;
+    let d_model = 4;
+    let d_head = 2;
+    let n_head = 4;
+
+    let mut model = SelfAttention::new(d_model, d_head, n_head);
+
+    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let mask = causal_mask(10)
+        .insert_axis(Axis(0))
+        .broadcast((5, 10, 10))
+        .unwrap()
+        .to_owned();
+
+    let y_immediate = model.forward(x.clone(), mask, false);
+
+    let mut k_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+    let mut v_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+
+    let x_start = x.slice(s![.., 0..(seq_len / 2), ..]).to_owned();
+    let x_end = x.slice(s![.., (seq_len / 2).., ..]).to_owned();
+
+    let seq_x_start = x_start.dim().1;
+    let mask_causal = causal_mask(seq_x_start)
+        .insert_axis(Axis(0))
+        .broadcast((5, seq_x_start, seq_x_start))
+        .unwrap()
+        .to_owned();
+    let mask_padding = Array3::ones((5, x_start.dim().1, k_cache.dim().1));
+    let mask = concatenate![Axis(2), mask_padding.view(), mask_causal.view()];
+    let y_stepped_1 = model.forward_cached(x_start, mask, &mut k_cache, &mut v_cache);
+
+    let seq_x_end = x_end.dim().1;
+    let mask_causal = causal_mask(seq_x_end)
+        .insert_axis(Axis(0))
+        .broadcast((5, seq_x_end, seq_x_end))
+        .unwrap()
+        .to_owned();
+    let mask_padding = Array3::ones((5, x_end.dim().1, k_cache.dim().1));
+    let mask = concatenate![Axis(2), mask_padding.view(), mask_causal.view()];
+    let y_stepped_2 = model.forward_cached(x_end, mask, &mut k_cache, &mut v_cache);
+
+    let y_stepped = concatenate![Axis(1), y_stepped_1.view(), y_stepped_2.view()];
+
+    let soft_eq = (&y_stepped - &y_immediate)
+        .mapv(|x| x.abs() < 1e-5)
+        .iter()
+        .all(|&b| b);
+
+    assert!(
+        soft_eq,
+        "full forward and kv cached forward diverge in computation\n{y_immediate:?}\n{y_stepped:?}"
+    );
 }
 
 fn make_associative_recall_dataset(

@@ -1,6 +1,6 @@
 use std::f32;
 
-use ndarray::{Array1, Array2, Array3, Axis, s, stack};
+use ndarray::{Array1, Array2, Array3, Axis, concatenate, s, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -85,6 +85,54 @@ impl Attention {
         output
     }
 
+    pub fn forward_cached(
+        &mut self,
+        q: Array3<f32>,
+        k: Array3<f32>,
+        v: Array3<f32>,
+        mask: Array3<f32>,
+        k_cache: &mut Array3<f32>,
+        v_cache: &mut Array3<f32>,
+    ) -> Array3<f32> {
+        let (batch_size, seq_len_q, _) = q.dim();
+
+        let k = concatenate![Axis(1), k_cache.view(), k.view()];
+        let v = concatenate![Axis(1), v_cache.view(), v.view()];
+
+        let (_, seq_len_k, features_k) = k.dim();
+        let (_, _, features_v) = v.dim();
+
+        assert!(
+            q.dim().0 == k.dim().0 && k.dim().0 == v.dim().0,
+            "batch size mismatch"
+        );
+        assert!(k.dim().1 == v.dim().1, "k/v seq len mismatch");
+        assert!(q.dim().2 == k.dim().2, "q/k feature size mismatch");
+        assert!(mask.dim() == (batch_size, seq_len_q, seq_len_k));
+
+        let mut output = Array3::zeros((batch_size, seq_len_q, features_v));
+
+        let mask = mask.mapv(|x| if x == 0. { -f32::INFINITY } else { 0. });
+
+        for i in 0..batch_size {
+            let q_i = q.slice(s![i, .., ..]);
+            let k_i = k.slice(s![i, .., ..]);
+            let v_i = v.slice(s![i, .., ..]);
+
+            let scores = q_i.dot(&k_i.t());
+            let scores = scores / (features_k as f32).sqrt() + &mask.slice(s![i, .., ..]);
+            let weights = f::softmax(&scores);
+
+            let out = weights.dot(&v_i);
+            output.slice_mut(s![i, .., ..]).assign(&out);
+        }
+
+        *k_cache = k;
+        *v_cache = v;
+
+        output
+    }
+
     pub fn backward(&mut self, d_loss: Array3<f32>) -> (Array3<f32>, Array3<f32>, Array3<f32>) {
         let (batch_size, _, _) = self.cache.q.dim();
         let (_, _, features_k) = self.cache.k.dim();
@@ -116,6 +164,10 @@ impl Attention {
         }
 
         (d_q, d_k, d_v)
+    }
+
+    pub fn kv_cache(&self) -> (Array3<f32>, Array3<f32>) {
+        (self.cache.k.clone(), self.cache.v.clone())
     }
 
     pub fn weights(&self) -> &Array3<f32> {
@@ -248,6 +300,80 @@ impl SelfAttention {
         if grad {
             self.cache.attn_2d = attn_2d.clone();
         }
+
+        // o = (B * S, F)
+        let o_2d = attn_2d.dot(&self.w_o) + &self.b_o;
+        // o -> (B, S, F)
+        o_2d.into_shape_clone((batch_size, seq_len, features))
+            .unwrap()
+    }
+
+    pub fn forward_cached(
+        &mut self,
+        x: Array3<f32>,
+        mask: Array3<f32>,
+        k_cache: &mut Array3<f32>,
+        v_cache: &mut Array3<f32>,
+    ) -> Array3<f32> {
+        let (batch_size, seq_len, features) = x.dim();
+        assert!(features == self.d_in, "feature dimension mismatch");
+
+        // x -> (B * S, F)
+        let x_2d = x
+            .into_shape_clone((batch_size * seq_len, features))
+            .unwrap();
+
+        // qkv = (B * S, 3 * nH * dH)
+        let qkv = x_2d.dot(&self.w_qkv) + &self.b_qkv;
+        // qkv -> (B, S, 3, nH, dH)
+        let qkv = qkv
+            .into_shape_clone((batch_size, seq_len, 3, self.n_head, self.d_head))
+            .unwrap();
+        // qkv -> (3, nH, B, S, dH)
+        let qkv_permuted = qkv.permuted_axes([2, 0, 3, 1, 4]);
+
+        let q = qkv_permuted
+            .slice(s![0, .., .., .., ..])
+            .to_owned()
+            .into_shape_clone((batch_size * self.n_head, seq_len, self.d_head))
+            .unwrap();
+        let k = qkv_permuted
+            .slice(s![1, .., .., .., ..])
+            .to_owned()
+            .into_shape_clone((batch_size * self.n_head, seq_len, self.d_head))
+            .unwrap();
+        let v = qkv_permuted
+            .slice(s![2, .., .., .., ..])
+            .to_owned()
+            .into_shape_clone((batch_size * self.n_head, seq_len, self.d_head))
+            .unwrap();
+
+        // mask = (B, S, S) -> (B, nH, S, S) -> (B * nH, S, S)
+
+        let mask_seq_q = mask.dim().1;
+        let mask_seq_k = mask.dim().2;
+
+        let mask = mask
+            .insert_axis(Axis(1))
+            .broadcast((batch_size, self.n_head, mask_seq_q, mask_seq_k))
+            .unwrap()
+            .to_owned()
+            .into_shape_clone((batch_size * self.n_head, mask_seq_q, mask_seq_k))
+            .unwrap();
+
+        // attn = (B * nH, S, dH)
+        let attn = self
+            .attention
+            .forward_cached(q, k, v, mask, k_cache, v_cache);
+
+        // attn -> (B * S, nH * dH)
+        let attn_2d = attn
+            .into_shape_clone((batch_size, self.n_head, seq_len, self.d_head))
+            .unwrap()
+            .permuted_axes([0, 2, 1, 3])
+            .to_owned()
+            .into_shape_clone((batch_size * seq_len, self.n_head * self.d_head))
+            .unwrap();
 
         // o = (B * S, F)
         let o_2d = attn_2d.dot(&self.w_o) + &self.b_o;

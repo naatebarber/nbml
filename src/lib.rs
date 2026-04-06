@@ -3,7 +3,6 @@ pub mod layers;
 pub mod modeling;
 pub mod nn;
 pub mod optim;
-pub mod tokenizers;
 pub mod util;
 
 pub use ndarray;

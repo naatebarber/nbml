@@ -1,4 +1,4 @@
-use ndarray::{Array2, Array3, Axis};
+use ndarray::{Array2, Array3, Axis, concatenate};
 use serde::{Deserialize, Serialize};
 
 use crate::layers::LayerNorm;
@@ -82,6 +82,49 @@ impl Transformer {
             .into_shape_clone((batch_size * seq_len, features))
             .unwrap();
         let ff_x_2d = self.feed_forward.forward(norm_x_2d, grad);
+        let ff_x = ff_x_2d
+            .into_shape_clone((batch_size, seq_len, features))
+            .unwrap();
+        let x = x + ff_x;
+
+        x
+    }
+
+    pub fn forward_cached(
+        &mut self,
+        x: Array3<f32>,
+        pad_mask: Array2<f32>,
+        k_cache: &mut Array3<f32>,
+        v_cache: &mut Array3<f32>,
+    ) -> Array3<f32> {
+        if !self.decoder {
+            panic!(
+                "cannot apply kv caching to transformer encoder models, kv caching is inherently causal."
+            );
+        }
+
+        let (batch_size, seq_len, features) = x.dim();
+
+        let norm_x = self.norm_attn.forward(x.clone(), false);
+
+        // mask needs to be (batch_size, seq_len, seq_len_kv_cache + seq_len)
+        let mut attn_mask = self.pad_mask(pad_mask);
+        attn_mask *= &self.causal_mask(batch_size, seq_len);
+
+        let seq_kv_cache = k_cache.dim().1;
+        let kv_mask_pad = Array3::ones((batch_size, seq_len, seq_kv_cache));
+        attn_mask = concatenate![Axis(2), kv_mask_pad.view(), attn_mask.view()];
+
+        let attn_x = self
+            .attn
+            .forward_cached(norm_x, attn_mask, k_cache, v_cache);
+        let x = x + &attn_x;
+
+        let norm_x = self.norm_feed_forward.forward(x.clone(), false);
+        let norm_x_2d = norm_x
+            .into_shape_clone((batch_size * seq_len, features))
+            .unwrap();
+        let ff_x_2d = self.feed_forward.forward(norm_x_2d, false);
         let ff_x = ff_x_2d
             .into_shape_clone((batch_size, seq_len, features))
             .unwrap();

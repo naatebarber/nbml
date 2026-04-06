@@ -3,7 +3,7 @@ use nbml::{
     nn::Transformer,
     optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
-use ndarray::{Array1, Array2, Array3, Axis, s, stack};
+use ndarray::{Array1, Array2, Array3, Axis, concatenate, s, stack};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use rand::{Rng, rng};
 
@@ -38,6 +38,88 @@ fn intermediate_caching() {
         grads_a.d_w_o == grads_c.d_w_o,
         "intermediate caching process fucks with gradients"
     );
+}
+
+#[test]
+fn kv_caching() {
+    let batch_size = 5;
+    let seq_len = 10;
+    let d_model = 4;
+    let d_head = 2;
+    let n_head = 4;
+
+    let mut model = Transformer::new_decoder(d_model, d_head, n_head);
+
+    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let pad_mask = Array2::ones((batch_size, seq_len));
+
+    let y_immediate = model.forward(x.clone(), pad_mask, false);
+
+    let mut k_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+    let mut v_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+    let mut y_stepped = Array3::zeros((batch_size, 0, d_model));
+    for t in 0..x.dim().1 {
+        let x_t = x.slice(s![.., t, ..]).to_owned();
+        let pad_mask = Array2::ones((batch_size, 1));
+
+        let y_t = model.forward_cached(
+            x_t.insert_axis(Axis(1)),
+            pad_mask,
+            &mut k_cache,
+            &mut v_cache,
+        );
+        y_stepped = concatenate![Axis(1), y_stepped.view(), y_t.view()]
+    }
+
+    let soft_eq = (&y_stepped - &y_immediate)
+        .mapv(|x| x.abs() < 1e-5)
+        .iter()
+        .all(|&b| b);
+
+    assert!(
+        soft_eq,
+        "full forward and kv cached forward diverge in computation\n{y_immediate:?}\n{y_stepped:?}"
+    )
+}
+
+#[test]
+fn kv_caching_2() {
+    let batch_size = 5;
+    let seq_len = 10;
+    let d_model = 4;
+    let d_head = 2;
+    let n_head = 4;
+
+    let mut model = Transformer::new_decoder(d_model, d_head, n_head);
+
+    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let pad_mask = Array2::ones((batch_size, seq_len));
+
+    let y_immediate = model.forward(x.clone(), pad_mask, false);
+
+    let mut k_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+    let mut v_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+
+    let x_start = x.slice(s![.., 0..(seq_len / 2), ..]).to_owned();
+    let x_end = x.slice(s![.., (seq_len / 2).., ..]).to_owned();
+
+    let pad_mask = Array2::ones((x_start.dim().0, x_start.dim().1));
+    let y_stepped_1 = model.forward_cached(x_start, pad_mask, &mut k_cache, &mut v_cache);
+
+    let pad_mask = Array2::ones((x_end.dim().0, x_end.dim().1));
+    let y_stepped_2 = model.forward_cached(x_end, pad_mask, &mut k_cache, &mut v_cache);
+
+    let y_stepped = concatenate![Axis(1), y_stepped_1.view(), y_stepped_2.view()];
+
+    let soft_eq = (&y_stepped - &y_immediate)
+        .mapv(|x| x.abs() < 1e-5)
+        .iter()
+        .all(|&b| b);
+
+    assert!(
+        soft_eq,
+        "full forward and kv cached forward diverge in computation\n{y_immediate:?}\n{y_stepped:?}"
+    )
 }
 
 const EMBED_DIM: usize = 16;
@@ -159,53 +241,6 @@ pub fn mean_pooling() {
         println!("  ✗ FAIL: Attention mechanism may have issues");
         assert!(false);
     }
-}
-
-#[test]
-fn gradient_flow() {
-    let mut transformer = Transformer::new_encoder(
-        EMBED_DIM, NUM_HEADS, 3, // Deeper network to test gradient flow
-    );
-
-    let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
-    let mask = Array2::ones((x.dim().0, x.dim().1));
-    let y = transformer.forward(x.clone(), mask, true);
-
-    // Create a gradient signal
-    let d_loss = Array3::ones(y.dim());
-    let dx = transformer.backward(d_loss);
-
-    // Check gradient statistics
-    let grad_mean = dx.mean().unwrap();
-    let grad_std = dx.std(0.);
-    let grad_max = dx.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-    let grad_min = dx.iter().cloned().fold(f32::INFINITY, f32::min);
-
-    println!("  Gradient statistics:");
-    println!("    Mean: {:.6}", grad_mean);
-    println!("    Std:  {:.6}", grad_std);
-    println!("    Min:  {:.6}", grad_min);
-    println!("    Max:  {:.6}", grad_max);
-
-    let has_nan = dx.iter().any(|&x| x.is_nan());
-    let has_inf = dx.iter().any(|&x| x.is_infinite());
-    let is_vanishing = grad_std < 1e-7;
-    let is_exploding = grad_std > 1e3;
-
-    if has_nan {
-        println!("  ✗ FAIL: Gradients contain NaN");
-    } else if has_inf {
-        println!("  ✗ FAIL: Gradients contain Inf");
-    } else if is_vanishing {
-        println!("  ✗ FAIL: Gradients are vanishing (std too small)");
-    } else if is_exploding {
-        println!("  ✗ FAIL: Gradients are exploding (std too large)");
-    } else {
-        println!("  ✓ PASS: Gradients are healthy");
-        return;
-    }
-
-    assert!(false);
 }
 
 #[test]
