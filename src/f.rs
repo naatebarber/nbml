@@ -153,29 +153,41 @@ pub fn batch_soft_cross_entropy_loss(
     (loss, d_loss)
 }
 
-pub fn cross_entropy_loss(probs: &Array2<f32>, classes: &Array1<usize>) -> (f32, Array2<f32>) {
-    let n = probs.dim().0;
-    let mut loss = 0.0;
-    let mut d_loss = probs.clone();
+pub fn cross_entropy_loss(logits: Array3<f32>, labels: &Array2<usize>) -> (f32, Array3<f32>) {
+    let (batch_size, seq_len, _vocab_size) = logits.dim();
+    let n = (batch_size * seq_len) as f32;
 
-    for i in 0..n {
-        loss -= probs[[i, classes[i]]].max(1e-10).ln();
-        d_loss[[i, classes[i]]] -= 1.0;
+    // numerical stability, subtract max per position
+    let max_logits = logits
+        .map_axis(Axis(2), |row| {
+            *row.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
+        })
+        .insert_axis(Axis(2));
+    let shifted = &logits - &max_logits;
+
+    // softmax
+    let exp = shifted.mapv(f32::exp);
+    let sum_exp = exp.sum_axis(Axis(2)).insert_axis(Axis(2));
+    let softmax = &exp / &sum_exp;
+
+    // gather -log(prob) at target indices
+    let mut total_loss = 0.0f32;
+    for b in 0..batch_size {
+        for t in 0..seq_len {
+            total_loss -= softmax[[b, t, labels[[b, t]]]].ln();
+        }
     }
 
-    loss /= n as f32;
-    let d_loss = d_loss / n as f32;
+    // grad softmax - one_hot(target), averaged
+    let mut d_logits = softmax;
+    for b in 0..batch_size {
+        for t in 0..seq_len {
+            d_logits[[b, t, labels[[b, t]]]] -= 1.0;
+        }
+    }
+    d_logits /= n;
 
-    (loss, d_loss)
-}
-
-pub fn batch_cross_entropy_loss(probs: Array3<f32>, classes: Array2<usize>) -> (f32, Array3<f32>) {
-    let (b, s, d) = probs.dim();
-    let probs_2d = probs.into_shape_clone((b * s, d)).unwrap();
-    let classes_1d = classes.into_shape_clone((b * s,)).unwrap();
-    let (loss, d_loss_2d) = cross_entropy_loss(&probs_2d, &classes_1d);
-    let d_loss = d_loss_2d.into_shape_clone((b, s, d)).unwrap();
-    (loss, d_loss)
+    (total_loss / n, d_logits)
 }
 
 pub fn bce_loss(sigmoid_probs: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
