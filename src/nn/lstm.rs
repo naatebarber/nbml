@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Axis, concatenate, s};
+use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, concatenate, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -72,25 +72,18 @@ impl LSTM {
         }
 
         for t in 0..seq_len {
-            let x_t = x.slice(s![.., t, ..]);
+            let x_t: ArrayView2<f32> = x.slice(s![.., t, ..]);
             let x_i = x_t.dot(&self.w_i);
             let r = state.dot(&self.w_r);
 
             let preactivatons = &x_i + &r + &self.b;
 
-            let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
-            let input_gate = f::sigmoid(
-                &preactivatons
-                    .slice(s![.., self.d_model..(2 * self.d_model)])
-                    .to_owned(),
-            );
-            let cell_gate = f::tanh(
-                &preactivatons
-                    .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
-                    .to_owned(),
-            );
-            let output_gate =
-                f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
+            let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]));
+            let input_gate =
+                f::sigmoid(&preactivatons.slice(s![.., self.d_model..(2 * self.d_model)]));
+            let cell_gate =
+                f::tanh(&preactivatons.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]));
+            let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]));
 
             if grad {
                 self.cache.x.slice_mut(s![t, .., ..]).assign(&x_t);
@@ -139,23 +132,26 @@ impl LSTM {
         let mut cell_resid = Array2::zeros((batch_size, features));
 
         for t in (0..seq_len).rev() {
-            let d_loss_t = &d_loss.slice(s![.., t, ..]) + &resid;
+            let d_loss_t: Array2<f32> = &d_loss.slice(s![.., t, ..]) + &resid;
 
-            let x = self.cache.x.slice(s![t, .., ..]);
-            let state = self.cache.states.slice(s![t, .., ..]);
-            let preactivations = self.cache.preactivations.slice(s![t, .., ..]);
-            let preactivations_forget = preactivations.slice(s![.., 0..self.d_model]);
-            let preactivations_input =
+            let x: ArrayView2<f32> = self.cache.x.slice(s![t, .., ..]);
+            let state: ArrayView2<f32> = self.cache.states.slice(s![t, .., ..]);
+            let preactivations: ArrayView2<f32> = self.cache.preactivations.slice(s![t, .., ..]);
+            let preactivations_forget: ArrayView2<f32> =
+                preactivations.slice(s![.., 0..self.d_model]);
+            let preactivations_input: ArrayView2<f32> =
                 preactivations.slice(s![.., self.d_model..(2 * self.d_model)]);
-            let preactivations_cell =
+            let preactivations_cell: ArrayView2<f32> =
                 preactivations.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
-            let preactivations_output = preactivations.slice(s![.., (3 * self.d_model)..]);
+            let preactivations_output: ArrayView2<f32> =
+                preactivations.slice(s![.., (3 * self.d_model)..]);
 
-            let gates = self.cache.gates.slice(s![t, .., ..]);
-            let forget_gate = gates.slice(s![.., 0..self.d_model]);
-            let input_gate = gates.slice(s![.., self.d_model..(2 * self.d_model)]);
-            let cell_gate = gates.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
-            let output_gate = gates.slice(s![.., (3 * self.d_model)..]);
+            let gates: ArrayView2<f32> = self.cache.gates.slice(s![t, .., ..]);
+            let forget_gate: ArrayView2<f32> = gates.slice(s![.., 0..self.d_model]);
+            let input_gate: ArrayView2<f32> = gates.slice(s![.., self.d_model..(2 * self.d_model)]);
+            let cell_gate: ArrayView2<f32> =
+                gates.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]);
+            let output_gate: ArrayView2<f32> = gates.slice(s![.., (3 * self.d_model)..]);
 
             let cell = self.cache.cells.slice(s![t, .., ..]);
 
@@ -164,7 +160,7 @@ impl LSTM {
 
             // calculate dz for output gate, will use later
             let d_output_gate = &d_loss_t * &f::tanh(&cell_next);
-            let d_output_dz = &d_output_gate * &f::d_sigmoid(&preactivations_output.to_owned());
+            let d_output_dz = &d_output_gate * &f::d_sigmoid(&preactivations_output);
 
             // differentiate through output update to cell update
             let d_cell = &d_loss_t * &f::d_tanh(&cell_next) * &output_gate + &cell_resid;
@@ -172,15 +168,15 @@ impl LSTM {
 
             // calculate dz for forget gate
             let d_forget_gate = &d_cell * &cell;
-            let d_forget_dz = &d_forget_gate * &f::d_sigmoid(&preactivations_forget.to_owned());
+            let d_forget_dz = &d_forget_gate * &f::d_sigmoid(&preactivations_forget);
 
             // calculate dz for input gate
             let d_input_gate = &d_cell * &cell_gate;
-            let d_input_dz = &d_input_gate * &f::d_sigmoid(&preactivations_input.to_owned());
+            let d_input_dz = &d_input_gate * &f::d_sigmoid(&preactivations_input);
 
             // calculate dz for cell gate
             let d_cell_gate = &d_cell * &input_gate;
-            let d_cell_dz = &d_cell_gate * &f::d_tanh(&preactivations_cell.to_owned());
+            let d_cell_dz = &d_cell_gate * &f::d_tanh(&preactivations_cell);
 
             // stack all gate dz
             let d_gates_dz = concatenate![
@@ -220,18 +216,11 @@ impl LSTM {
 
         let preactivatons = &x_i + &r + &self.b;
 
-        let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
-        let input_gate = f::sigmoid(
-            &preactivatons
-                .slice(s![.., self.d_model..(2 * self.d_model)])
-                .to_owned(),
-        );
-        let cell_gate = f::tanh(
-            &preactivatons
-                .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
-                .to_owned(),
-        );
-        let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
+        let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]));
+        let input_gate = f::sigmoid(&preactivatons.slice(s![.., self.d_model..(2 * self.d_model)]));
+        let cell_gate =
+            f::tanh(&preactivatons.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]));
+        let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]));
 
         *cell = &(*cell) * &forget_gate + (&input_gate * &cell_gate);
         *h = &output_gate * f::tanh(&cell);
@@ -282,18 +271,11 @@ impl LSTM {
             .push(Axis(0), preactivatons.view())
             .unwrap();
 
-        let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]).to_owned());
-        let input_gate = f::sigmoid(
-            &preactivatons
-                .slice(s![.., self.d_model..(2 * self.d_model)])
-                .to_owned(),
-        );
-        let cell_gate = f::tanh(
-            &preactivatons
-                .slice(s![.., (2 * self.d_model)..(3 * self.d_model)])
-                .to_owned(),
-        );
-        let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]).to_owned());
+        let forget_gate = f::sigmoid(&preactivatons.slice(s![.., 0..self.d_model]));
+        let input_gate = f::sigmoid(&preactivatons.slice(s![.., self.d_model..(2 * self.d_model)]));
+        let cell_gate =
+            f::tanh(&preactivatons.slice(s![.., (2 * self.d_model)..(3 * self.d_model)]));
+        let output_gate = f::sigmoid(&preactivatons.slice(s![.., (3 * self.d_model)..]));
 
         let gates = concatenate![
             Axis(1),

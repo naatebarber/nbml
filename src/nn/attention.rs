@@ -1,6 +1,6 @@
 use std::f32;
 
-use ndarray::{Array1, Array2, Array3, Axis, concatenate, s, stack};
+use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, concatenate, s, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -66,9 +66,9 @@ impl Attention {
         let mask = mask.mapv(|x| if x == 0. { -f32::INFINITY } else { 0. });
 
         for i in 0..batch_size {
-            let q_i = q.slice(s![i, .., ..]);
-            let k_i = k.slice(s![i, .., ..]);
-            let v_i = v.slice(s![i, .., ..]);
+            let q_i: ArrayView2<f32> = q.slice(s![i, .., ..]);
+            let k_i: ArrayView2<f32> = k.slice(s![i, .., ..]);
+            let v_i: ArrayView2<f32> = v.slice(s![i, .., ..]);
 
             let scores = q_i.dot(&k_i.t());
             let scores = (scores / (features_k as f32).sqrt()) + &mask.slice(s![i, .., ..]);
@@ -115,9 +115,9 @@ impl Attention {
         let mask = mask.mapv(|x| if x == 0. { -f32::INFINITY } else { 0. });
 
         for i in 0..batch_size {
-            let q_i = q.slice(s![i, .., ..]);
-            let k_i = k.slice(s![i, .., ..]);
-            let v_i = v.slice(s![i, .., ..]);
+            let q_i: ArrayView2<f32> = q.slice(s![i, .., ..]);
+            let k_i: ArrayView2<f32> = k.slice(s![i, .., ..]);
+            let v_i: ArrayView2<f32> = v.slice(s![i, .., ..]);
 
             let scores = q_i.dot(&k_i.t());
             let scores = scores / (features_k as f32).sqrt() + &mask.slice(s![i, .., ..]);
@@ -142,17 +142,17 @@ impl Attention {
         let mut d_v = Array3::zeros(self.cache.v.dim());
 
         for i in 0..batch_size {
-            let d_loss_i = d_loss.slice(s![i, .., ..]);
-            let weights_i = self.cache.weights.slice(s![i, .., ..]);
-            let q_i = self.cache.q.slice(s![i, .., ..]);
-            let k_i = self.cache.k.slice(s![i, .., ..]);
-            let v_i = self.cache.v.slice(s![i, .., ..]);
+            let d_loss_i: ArrayView2<f32> = d_loss.slice(s![i, .., ..]);
+            let weights_i: ArrayView2<f32> = self.cache.weights.slice(s![i, .., ..]);
+            let q_i: ArrayView2<f32> = self.cache.q.slice(s![i, .., ..]);
+            let k_i: ArrayView2<f32> = self.cache.k.slice(s![i, .., ..]);
+            let v_i: ArrayView2<f32> = self.cache.v.slice(s![i, .., ..]);
 
             let d_v_i = weights_i.t().dot(&d_loss_i);
             d_v.slice_mut(s![i, .., ..]).assign(&d_v_i);
 
             let d_weights = d_loss_i.dot(&v_i.t());
-            let d_scores = d_softmax(&weights_i.to_owned(), &d_weights);
+            let d_scores = d_softmax(&weights_i, &d_weights);
             let d_scores = d_scores / (features_k as f32).sqrt();
 
             let d_k_i_t = q_i.t().dot(&d_scores);

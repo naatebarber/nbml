@@ -1,93 +1,93 @@
 use core::f32;
 
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{Array1, Array2, Array3, ArrayRef2, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use ndarray_stats::QuantileExt;
 use rand::{Rng, rngs::ThreadRng};
 use serde::{Deserialize, Serialize};
 
-pub type ActivationFn = fn(&Array2<f32>) -> Array2<f32>;
+pub type ActivationFn = fn(&ArrayRef2<f32>) -> Array2<f32>;
 pub type InitializationFn = fn((usize, usize)) -> Array2<f32>;
 
 // ACTIVATIONS
 
-pub fn relu(x: &Array2<f32>) -> Array2<f32> {
+pub fn relu(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|v| v.max(0.))
 }
 
-pub fn d_relu(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_relu(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|v| v.signum().max(0.))
 }
 
-pub fn tanh(x: &Array2<f32>) -> Array2<f32> {
+pub fn tanh(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|v| v.tanh())
 }
 
-pub fn d_tanh(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_tanh(x: &ArrayRef2<f32>) -> Array2<f32> {
     1. - (x.mapv(|v| v.tanh())).powi(2)
 }
 
-pub fn leaky_relu(x: &Array2<f32>) -> Array2<f32> {
+pub fn leaky_relu(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|x| if x >= 0. { x } else { 0.01 * x })
 }
 
-pub fn d_leaky_relu(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_leaky_relu(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|x| if x >= 0. { 1. } else { 0.01 })
 }
 
-pub fn exp(x: &Array2<f32>) -> Array2<f32> {
+pub fn exp(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.exp()
 }
 
-pub fn d_exp(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_exp(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.exp()
 }
 
-pub fn elu(x: &Array2<f32>) -> Array2<f32> {
+pub fn elu(x: &ArrayRef2<f32>) -> Array2<f32> {
     let x_pos = x.clamp(0., f32::MAX);
     let x_neg = x.clamp(f32::MIN, 0.);
 
     &x_pos + (x_neg.exp() - 1.)
 }
 
-pub fn d_elu(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_elu(x: &ArrayRef2<f32>) -> Array2<f32> {
     let x_pos = x.clamp(0., f32::MAX);
     let x_neg = x.clamp(f32::MIN, 0.);
 
     &x_pos.signum() + x_neg.exp()
 }
 
-pub fn softplus(x: &Array2<f32>) -> Array2<f32> {
+pub fn softplus(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|v| if v > 20.0 { v } else { (1.0 + v.exp()).ln() })
 }
 
-pub fn d_softplus(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_softplus(x: &ArrayRef2<f32>) -> Array2<f32> {
     sigmoid(x)
 }
 
-pub fn ident(x: &Array2<f32>) -> Array2<f32> {
+pub fn ident(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.to_owned()
 }
 
-pub fn d_ident(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_ident(x: &ArrayRef2<f32>) -> Array2<f32> {
     Array2::ones(x.dim())
 }
 
-pub fn sigmoid(x: &Array2<f32>) -> Array2<f32> {
+pub fn sigmoid(x: &ArrayRef2<f32>) -> Array2<f32> {
     x.mapv(|v| 1.0 / (1.0 + (-v).exp()))
 }
 
-pub fn d_sigmoid(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_sigmoid(x: &ArrayRef2<f32>) -> Array2<f32> {
     let s = sigmoid(x);
     &s * &(1.0 - &s)
 }
 
-pub fn softmax(x: &Array2<f32>) -> Array2<f32> {
+pub fn softmax(x: &ArrayRef2<f32>) -> Array2<f32> {
     let maxes = x
         .map_axis(Axis(1), |row| row.max().cloned().unwrap_or(1e-4))
         .insert_axis(Axis(1));
 
-    let mut d = x - &maxes;
+    let mut d = x - maxes;
 
     d.mapv_inplace(|x| x.exp());
 
@@ -97,7 +97,7 @@ pub fn softmax(x: &Array2<f32>) -> Array2<f32> {
     return last;
 }
 
-pub fn d_softmax(s: &Array2<f32>, g: &Array2<f32>) -> Array2<f32> {
+pub fn d_softmax(s: &ArrayRef2<f32>, g: &ArrayRef2<f32>) -> Array2<f32> {
     let dot = (g * s).sum_axis(Axis(1)).insert_axis(Axis(1));
     s * (g - dot)
 }
@@ -106,7 +106,7 @@ pub fn d_softmax(s: &Array2<f32>, g: &Array2<f32>) -> Array2<f32> {
  * The output of this method gets multiplied against the incoming gradient. Since the gradient of
  * cross entropy loss is y_pred - y, we don't want to mutate it at all, and return 1
  */
-pub fn d_softmax_cross_entropy(x: &Array2<f32>) -> Array2<f32> {
+pub fn d_softmax_cross_entropy(x: &ArrayRef2<f32>) -> Array2<f32> {
     Array2::ones(x.dim())
 }
 
@@ -132,9 +132,12 @@ pub fn xavier(shape: (usize, usize)) -> Array2<f32> {
 
 // LOSSES
 
-pub fn soft_cross_entropy_loss(probs: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
+pub fn soft_cross_entropy_loss(
+    probs: &ArrayRef2<f32>,
+    targets: &ArrayRef2<f32>,
+) -> (f32, Array2<f32>) {
     let log_probs = probs.mapv(|p| p.max(1e-10).ln());
-    let loss = -(targets * &log_probs).sum() / probs.dim().0 as f32;
+    let loss = -(targets * log_probs).sum() / probs.dim().0 as f32;
 
     let d_loss = probs - targets;
 
@@ -190,17 +193,17 @@ pub fn cross_entropy_loss(logits: Array3<f32>, labels: &Array2<usize>) -> (f32, 
     (total_loss / n, d_logits)
 }
 
-pub fn bce_loss(sigmoid_probs: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
+pub fn bce_loss(sigmoid_probs: &ArrayRef2<f32>, targets: &ArrayRef2<f32>) -> (f32, Array2<f32>) {
     let eps = 1e-10;
     let n = sigmoid_probs.len() as f32;
 
-    let loss = -(targets * &sigmoid_probs.mapv(|p| p.max(eps).ln())
+    let loss = -(targets * sigmoid_probs.mapv(|p| p.max(eps).ln())
         + (1.0 - targets) * &sigmoid_probs.mapv(|p| (1.0 - p).max(eps).ln()))
         .sum()
         / n;
 
     let d_loss = (sigmoid_probs - targets)
-        / &(sigmoid_probs * &(1.0 - sigmoid_probs)).mapv(|v| v.max(eps))
+        / &(sigmoid_probs * (1.0 - sigmoid_probs)).mapv(|v| v.max(eps))
         / n;
 
     (loss, d_loss)
@@ -215,7 +218,7 @@ pub fn batch_bce_loss(sigmoid_probs: Array3<f32>, targets: Array3<f32>) -> (f32,
     (loss, d_loss)
 }
 
-pub fn mse_loss(logits: &Array2<f32>, targets: &Array2<f32>) -> (f32, Array2<f32>) {
+pub fn mse_loss(logits: &ArrayRef2<f32>, targets: &ArrayRef2<f32>) -> (f32, Array2<f32>) {
     let diff = logits - targets;
     let n = logits.len() as f32;
 
@@ -237,34 +240,36 @@ pub fn batch_mse_loss(logits: Array3<f32>, targets: Array3<f32>) -> (f32, Array3
 
 // NORM
 
-pub fn l2(x: &Array2<f32>) -> Array1<f32> {
+pub fn l2(x: &ArrayRef2<f32>) -> Array1<f32> {
     let eps = 1e-6;
     x.pow2().sum_axis(Axis(1)).sqrt().mapv(|x| x.max(eps))
 }
 
-pub fn l2_norm(x: &Array2<f32>) -> Array2<f32> {
+pub fn l2_norm(x: &ArrayRef2<f32>) -> Array2<f32> {
     x / l2(&x).insert_axis(Axis(1))
 }
 
-pub fn d_l2_norm(x: &Array2<f32>, grad: &Array2<f32>) -> Array2<f32> {
+pub fn d_l2_norm(x: &ArrayRef2<f32>, grad: &ArrayRef2<f32>) -> Array2<f32> {
     let norm = l2(x).insert_axis(Axis(1));
-    let x_hat = x / &norm;
-    let dot = (&x_hat * grad).sum_axis(Axis(1)).insert_axis(Axis(1));
+    let x_hat = x / norm.to_owned();
+    let dot = (x_hat.to_owned() * grad)
+        .sum_axis(Axis(1))
+        .insert_axis(Axis(1));
     (grad - &x_hat * dot) / &norm
 }
 
 // MISC
 
-pub fn linear_norm(x: &Array2<f32>) -> Array2<f32> {
+pub fn linear_norm(x: &ArrayRef2<f32>) -> Array2<f32> {
     let sum = x.sum_axis(Axis(1)).insert_axis(Axis(1));
-    x / &sum
+    x / sum
 }
 
 pub fn softmax_vector_jacobian_product(
-    upstream: &Array2<f32>,
-    softmax_out: &Array2<f32>,
+    upstream: &ArrayRef2<f32>,
+    softmax_out: &ArrayRef2<f32>,
 ) -> Array2<f32> {
-    let mut grad = upstream.clone();
+    let mut grad = upstream.to_owned();
 
     for ((mut g_row, s_row), u_row) in grad
         .axis_iter_mut(Axis(0))
@@ -356,7 +361,11 @@ pub fn sample_gumbel_categorical(log_probs: &Array1<f32>, rng: &mut ThreadRng) -
     (log_probs + u).argmax().unwrap()
 }
 
-pub fn gaussian_log_prob(x: &Array2<f32>, u: &Array2<f32>, o: &Array2<f32>) -> Array1<f32> {
+pub fn gaussian_log_prob(
+    x: &ArrayRef2<f32>,
+    u: &ArrayRef2<f32>,
+    o: &ArrayRef2<f32>,
+) -> Array1<f32> {
     let eps = 1e-8;
     let quadratic = (x - u).powi(2) / o.powi(2);
     let norm = 2. * o.map(|v| v.max(eps).ln());
@@ -367,17 +376,17 @@ pub fn gaussian_log_prob(x: &Array2<f32>, u: &Array2<f32>, o: &Array2<f32>) -> A
     dims.sum_axis(Axis(1))
 }
 
-pub fn tanh_gaussian_correction(a_raw: &Array2<f32>) -> Array1<f32> {
+pub fn tanh_gaussian_correction(a_raw: &ArrayRef2<f32>) -> Array1<f32> {
     let d_tanh = d_tanh(a_raw);
     d_tanh.ln().sum_axis(Axis(1))
 }
 
-pub fn tanh_gaussian_correction_eps(a_raw: &Array2<f32>) -> Array1<f32> {
+pub fn tanh_gaussian_correction_eps(a_raw: &ArrayRef2<f32>) -> Array1<f32> {
     let deriv = 1.0 - a_raw.mapv(|u| u.tanh().powi(2)); // d_tanh(u)
     deriv.mapv(|v| (v + 1e-8).ln()).sum_axis(Axis(1))
 }
 
-pub fn calculate_spectral_radius(w_r: &Array2<f32>, n: usize) -> f32 {
+pub fn calculate_spectral_radius(w_r: &ArrayRef2<f32>, n: usize) -> f32 {
     let mut h = Array2::ones((1, w_r.dim().0));
     let mut radius = 0.;
     for _ in 0..n {

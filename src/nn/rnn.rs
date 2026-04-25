@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Axis, s};
+use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -63,7 +63,7 @@ impl RNN {
         }
 
         for t in 0..seq_len {
-            let x_t = x.slice(s![.., t, ..]);
+            let x_t: ArrayView2<f32> = x.slice(s![.., t, ..]);
             let x_i = x_t.dot(&self.w_i);
             let r = state.dot(&self.w_r);
 
@@ -105,11 +105,11 @@ impl RNN {
         let mut resid = Array2::zeros((batch_size, features));
 
         for t in (0..seq_len).rev() {
-            let d_loss_t = &d_loss.slice(s![.., t, ..]) + &resid;
+            let d_loss_t: Array2<f32> = &d_loss.slice(s![.., t, ..]) + &resid;
 
-            let preactivations = self.cache.preactivations.slice(s![t, .., ..]).to_owned();
-            let state = self.cache.states.slice(s![t, .., ..]);
-            let x = self.cache.x.slice(s![t, .., ..]);
+            let preactivations: ArrayView2<f32> = self.cache.preactivations.slice(s![t, .., ..]);
+            let state: ArrayView2<f32> = self.cache.states.slice(s![t, .., ..]);
+            let x: ArrayView2<f32> = self.cache.x.slice(s![t, .., ..]);
 
             let d_z = &d_loss_t * f::d_tanh(&preactivations);
             self.grads.d_wi += &x.t().dot(&d_z);

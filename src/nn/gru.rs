@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Axis, concatenate, s};
+use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, concatenate, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -81,10 +81,8 @@ impl GRU {
             let x_state = concatenate![Axis(1), x_t.view(), state.view()];
             let ru_preactivations = x_state.dot(&self.w_ru) + &self.b_ru;
 
-            let reset_gate =
-                f::sigmoid(&ru_preactivations.slice(s![.., 0..self.d_model]).to_owned());
-            let update_gate =
-                f::sigmoid(&ru_preactivations.slice(s![.., self.d_model..]).to_owned());
+            let reset_gate = f::sigmoid(&ru_preactivations.slice(s![.., 0..self.d_model]));
+            let update_gate = f::sigmoid(&ru_preactivations.slice(s![.., self.d_model..]));
 
             let reset_state = &state * &reset_gate;
             let x_reset_state = concatenate![Axis(1), x_t.view(), reset_state.view()];
@@ -150,18 +148,22 @@ impl GRU {
         let mut d_resid = Array2::zeros((batch_size, self.d_model));
 
         for t in (0..seq_len).rev() {
-            let d_loss_t = &d_loss.slice(s![.., t, ..]) + &d_resid;
-            let update_gate_t = self.cache.update_gates.slice(s![.., t, ..]);
-            let reset_gate_t = self.cache.reset_gates.slice(s![.., t, ..]);
-            let c_t = self.cache.c.slice(s![.., t, ..]);
-            let reset_state_t = self.cache.reset_states.slice(s![.., t, ..]);
-            let c_preactivations_t = self.cache.c_preactivations.slice(s![.., t, ..]);
-            let ru_preactivations_t = self.cache.ru_preactivations.slice(s![.., t, ..]);
-            let x_t = self.cache.x.slice(s![.., t, ..]);
-            let state_prev = self.cache.states.slice(s![.., t, ..]);
+            let d_loss_t: Array2<f32> = &d_loss.slice(s![.., t, ..]) + &d_resid;
+            let update_gate_t: ArrayView2<f32> = self.cache.update_gates.slice(s![.., t, ..]);
+            let reset_gate_t: ArrayView2<f32> = self.cache.reset_gates.slice(s![.., t, ..]);
+            let c_t: ArrayView2<f32> = self.cache.c.slice(s![.., t, ..]);
+            let reset_state_t: ArrayView2<f32> = self.cache.reset_states.slice(s![.., t, ..]);
+            let c_preactivations_t: ArrayView2<f32> =
+                self.cache.c_preactivations.slice(s![.., t, ..]);
+            let ru_preactivations_t: ArrayView2<f32> =
+                self.cache.ru_preactivations.slice(s![.., t, ..]);
+            let x_t: ArrayView2<f32> = self.cache.x.slice(s![.., t, ..]);
+            let state_prev: ArrayView2<f32> = self.cache.states.slice(s![.., t, ..]);
 
-            let reset_preactivations = ru_preactivations_t.slice(s![.., 0..self.d_model]);
-            let update_preactivations = ru_preactivations_t.slice(s![.., self.d_model..]);
+            let reset_preactivations: ArrayView2<f32> =
+                ru_preactivations_t.slice(s![.., 0..self.d_model]);
+            let update_preactivations: ArrayView2<f32> =
+                ru_preactivations_t.slice(s![.., self.d_model..]);
 
             // get d_update_gate from side of c
             let d_update_gate_c = &c_t * &d_loss_t;
@@ -170,7 +172,7 @@ impl GRU {
             let d_c = &update_gate_t * &d_loss_t;
 
             // get grads of w_c and b_c
-            let d_c_dz = &d_c * f::d_tanh(&c_preactivations_t.to_owned());
+            let d_c_dz = &d_c * f::d_tanh(&c_preactivations_t);
 
             let x_reset_state = concatenate![Axis(1), x_t.view(), reset_state_t.view()];
             self.grads.d_w_c += &(x_reset_state.t().dot(&d_c_dz));
@@ -184,7 +186,7 @@ impl GRU {
             // differentiate through reset gate
             let d_state_c_reset = &d_reset_state_c_gate * &reset_gate_t;
             let d_reset_gate = &d_reset_state_c_gate * &state_prev;
-            let d_reset_gate_dz = &d_reset_gate * f::d_sigmoid(&reset_preactivations.to_owned());
+            let d_reset_gate_dz = &d_reset_gate * f::d_sigmoid(&reset_preactivations);
 
             // pause here since reset gate is ready for differentiation, differentiate update gate
             // w.r.t. prev state
@@ -195,7 +197,7 @@ impl GRU {
             // collect and both update gate gradients
 
             let d_update_gate = &d_update_gate_c + &d_update_gate_state;
-            let d_update_gate_dz = &d_update_gate * f::d_sigmoid(&update_preactivations.to_owned());
+            let d_update_gate_dz = &d_update_gate * f::d_sigmoid(&update_preactivations);
 
             // concatenate both d_update_gate and d_reset_gate, get gradients for w_ru and b_ru
 
@@ -227,8 +229,8 @@ impl GRU {
         let x_state = concatenate![Axis(1), x.view(), state.view()];
         let ru_preactivations = x_state.dot(&self.w_ru) + &self.b_ru;
 
-        let reset_gate = f::sigmoid(&ru_preactivations.slice(s![.., 0..self.d_model]).to_owned());
-        let update_gate = f::sigmoid(&ru_preactivations.slice(s![.., self.d_model..]).to_owned());
+        let reset_gate = f::sigmoid(&ru_preactivations.slice(s![.., 0..self.d_model]));
+        let update_gate = f::sigmoid(&ru_preactivations.slice(s![.., self.d_model..]));
 
         let reset_state = &(*state) * &reset_gate;
         let x_reset_state = concatenate![Axis(1), x.view(), reset_state.view()];

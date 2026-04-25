@@ -1,4 +1,4 @@
-use ndarray::{Array2, Array3, s};
+use ndarray::{Array2, Array3, ArrayView2, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -119,10 +119,10 @@ impl LinearSSM {
         let mut resid = Array2::zeros((batch_size, self.d_model));
 
         for t in (0..seq_len).rev() {
-            let d_loss_t = d_loss.slice(s![.., t, ..]);
-            let state_t = self.cache.states.slice(s![t, .., ..]);
-            let state_next = self.cache.states.slice(s![t + 1, .., ..]);
-            let x_t = self.cache.x.slice(s![t, .., ..]);
+            let d_loss_t: ArrayView2<f32> = d_loss.slice(s![.., t, ..]);
+            let state_t: ArrayView2<f32> = self.cache.states.slice(s![t, .., ..]);
+            let state_next: ArrayView2<f32> = self.cache.states.slice(s![t + 1, .., ..]);
+            let x_t: ArrayView2<f32> = self.cache.x.slice(s![t, .., ..]);
 
             self.grads.d_c += &state_next.t().dot(&d_loss_t);
 

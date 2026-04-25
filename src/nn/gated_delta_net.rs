@@ -352,8 +352,8 @@ impl GatedDeltaNet {
             .permuted_axes([1, 0, 2])
             .to_owned();
 
-        let q_preactivations = qkv.slice(s![0, .., ..]).to_owned();
-        let k_preactivations = qkv.slice(s![1, .., ..]).to_owned();
+        let q_preactivations = qkv.slice(s![0, .., ..]);
+        let k_preactivations = qkv.slice(s![1, .., ..]);
         let v = qkv.slice(s![2, .., ..]);
 
         let q = f::l2_norm(&q_preactivations);
