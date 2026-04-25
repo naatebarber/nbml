@@ -10,8 +10,8 @@ use rand::{Rng, rng};
 #[test]
 fn intermediate_caching() {
     let mut model = Transformer::new_encoder(8, 4, 2);
-    let x = Array3::random((2, 3, 8), Uniform::new(0., 1.));
-    let x2 = Array3::random((2, 3, 8), Uniform::new(0., 1.));
+    let x = Array3::random((2, 3, 8), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((2, 3, 8), Uniform::new(0., 1.).unwrap());
     let mask = Array2::ones((2, 3));
     let d = Array3::ones((2, 3, 8));
 
@@ -50,7 +50,10 @@ fn kv_caching() {
 
     let mut model = Transformer::new_decoder(d_model, d_head, n_head);
 
-    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let x = Array3::random(
+        (batch_size, seq_len, d_model),
+        Uniform::new(0., 1.).unwrap(),
+    );
     let pad_mask = Array2::ones((batch_size, seq_len));
 
     let y_immediate = model.forward(x.clone(), pad_mask, false);
@@ -92,7 +95,10 @@ fn kv_caching_2() {
 
     let mut model = Transformer::new_decoder(d_model, d_head, n_head);
 
-    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let x = Array3::random(
+        (batch_size, seq_len, d_model),
+        Uniform::new(0., 1.).unwrap(),
+    );
     let pad_mask = Array2::ones((batch_size, seq_len));
 
     let y_immediate = model.forward(x.clone(), pad_mask, false);
@@ -143,7 +149,10 @@ fn identity() {
     println!("Test 1: Identity Task (learns to output = input)");
     println!("This tests if the transformer can learn with residual connections\n");
 
-    let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
+    let x = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
     let y_target = x.clone();
 
     let mut losses = Vec::new();
@@ -196,7 +205,10 @@ pub fn mean_pooling() {
     let mut optim2 = AdamW::default().with(&mut transformer2);
     optim2.learning_rate = 1e-3;
 
-    let x2 = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
+    let x2 = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
     let mean = x2.mean_axis(Axis(1)).unwrap().insert_axis(Axis(1));
     let y_target2 = mean
         .broadcast((BATCH_SIZE, SEQ_LEN, EMBED_DIM))
@@ -251,8 +263,14 @@ fn overfitting() {
     optim.learning_rate = 6e-3; // Higher learning rate for faster overfitting
 
     // Fixed small dataset - should memorize perfectly
-    let x = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
-    let y_target = Array3::random((BATCH_SIZE, SEQ_LEN, EMBED_DIM), Uniform::new(-1., 1.));
+    let x = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
+    let y_target = Array3::random(
+        (BATCH_SIZE, SEQ_LEN, EMBED_DIM),
+        Uniform::new(-1., 1.).unwrap(),
+    );
 
     let mut final_loss = 1.0;
 
@@ -308,9 +326,9 @@ fn retrieval_by_marker() {
     let mut final_loss = 0.;
     for e in 0..6000 {
         // 3 random vectors
-        let v1 = Array1::random(16, Uniform::new(0., 1.));
-        let v2 = Array1::random(16, Uniform::new(0., 1.));
-        let v3 = Array1::random(16, Uniform::new(0., 1.));
+        let v1 = Array1::random(16, Uniform::new(0., 1.).unwrap());
+        let v2 = Array1::random(16, Uniform::new(0., 1.).unwrap());
+        let v3 = Array1::random(16, Uniform::new(0., 1.).unwrap());
 
         // Marker: which one to retrieve (0, 1, or 2)
         let target_idx = rng().random_range(0..3);
@@ -385,7 +403,7 @@ fn fixed_position_retrieval() {
     let mut final_loss = 0.;
     for e in 0..2000 {
         let vectors: Vec<Array1<f32>> = (0..5)
-            .map(|_| Array1::random(16, Uniform::new(0., 1.)))
+            .map(|_| Array1::random(16, Uniform::new(0., 1.).unwrap()))
             .collect();
 
         let mut x = Array3::zeros((1, 6, 16));
@@ -449,7 +467,7 @@ fn delayed_copy_single_token() {
     let mut final_loss = 0.;
     for e in 0..3000 {
         let vectors: Vec<Array1<f32>> = (0..5)
-            .map(|_| Array1::random(16, Uniform::new(0., 1.)))
+            .map(|_| Array1::random(16, Uniform::new(0., 1.).unwrap()))
             .collect();
 
         let mut x = Array3::zeros((1, 10, 16));
@@ -508,7 +526,7 @@ fn memorize_one_delayed_copy() {
 
     // Fixed vectors - same every epoch
     let vectors: Vec<Array1<f32>> = (0..5)
-        .map(|_| Array1::random(16, Uniform::new(0., 1.)))
+        .map(|_| Array1::random(16, Uniform::new(0., 1.).unwrap()))
         .collect();
 
     let mut x = Array3::zeros((1, 10, 16));

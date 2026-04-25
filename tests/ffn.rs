@@ -9,8 +9,8 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn intermediate_caching() {
     let mut model = FFN::new(vec![(4, 8, Activation::Relu), (8, 4, Activation::Sigmoid)]);
-    let x = Array2::random((2, 4), Uniform::new(0., 1.));
-    let x2 = Array2::random((2, 4), Uniform::new(0., 1.));
+    let x = Array2::random((2, 4), Uniform::new(0., 1.).unwrap());
+    let x2 = Array2::random((2, 4), Uniform::new(0., 1.).unwrap());
     let d = Array2::ones((2, 4));
 
     model.forward(x.clone(), true);

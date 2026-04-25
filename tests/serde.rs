@@ -9,7 +9,7 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
 fn serde_model() {
-    let x = Array3::random((5, 5, 32), Uniform::new(0., 1.));
+    let x = Array3::random((5, 5, 32), Uniform::new(0., 1.).unwrap());
 
     let mut lstm = LSTM::new(32);
     lstm.persist("./lstm1.bin").unwrap();
@@ -26,7 +26,7 @@ fn serde_model() {
 
 #[test]
 fn serde_partial_grad_model() {
-    let x = Array2::random((5, 32), Uniform::new(0., 1.));
+    let x = Array2::random((5, 32), Uniform::new(0., 1.).unwrap());
 
     let mut state = Array2::zeros((5, 64));
     let mut lsm = LSM::new(32, 64, 32);

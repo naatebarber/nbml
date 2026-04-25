@@ -9,8 +9,8 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn intermediate_caching() {
     let mut model = Conv2D::new(3, 6, 3, 3, he);
-    let x = Array4::random((2, 3, 8, 8), Uniform::new(0., 1.));
-    let x2 = Array4::random((2, 3, 8, 8), Uniform::new(0., 1.));
+    let x = Array4::random((2, 3, 8, 8), Uniform::new(0., 1.).unwrap());
+    let x2 = Array4::random((2, 3, 8, 8), Uniform::new(0., 1.).unwrap());
     let d = Array4::ones((2, 6, 6, 6));
 
     model.forward(x.clone(), true);
@@ -83,7 +83,7 @@ fn patchwise_conv2d_produces_correct_shapes() {
 }
 
 fn inversion_dataset() -> (Array4<f32>, Array4<f32>) {
-    let x = Array4::random((10, 1, 10, 10), Uniform::new(0., 1.)).round();
+    let x = Array4::random((10, 1, 10, 10), Uniform::new(0., 1.).unwrap()).round();
     let y = (&x - 1.).abs();
 
     (x, y)

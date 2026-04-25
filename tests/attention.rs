@@ -10,8 +10,8 @@ use rand::{rng, seq::IteratorRandom};
 #[test]
 fn intermediate_caching() {
     let mut attn = SelfAttention::new(10, 5, 2);
-    let x = Array3::random((1, 1, 10), Uniform::new(0., 1.));
-    let x2 = Array3::random((1, 1, 10), Uniform::new(0., 1.));
+    let x = Array3::random((1, 1, 10), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((1, 1, 10), Uniform::new(0., 1.).unwrap());
 
     let d = Array3::ones((1, 1, 10));
 
@@ -253,7 +253,10 @@ fn kv_caching() {
     let d_head = 2;
     let n_head = 2;
 
-    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let x = Array3::random(
+        (batch_size, seq_len, d_model),
+        Uniform::new(0., 1.).unwrap(),
+    );
 
     let mask = causal_mask(10)
         .insert_axis(Axis(0))
@@ -300,7 +303,10 @@ fn kv_caching_2() {
 
     let mut model = SelfAttention::new(d_model, d_head, n_head);
 
-    let x = Array3::random((batch_size, seq_len, d_model), Uniform::new(0., 1.));
+    let x = Array3::random(
+        (batch_size, seq_len, d_model),
+        Uniform::new(0., 1.).unwrap(),
+    );
     let mask = causal_mask(10)
         .insert_axis(Axis(0))
         .broadcast((5, 10, 10))
@@ -360,10 +366,10 @@ fn make_associative_recall_dataset(
 
     for b in 0..batch_size {
         let keys: Vec<Array1<f32>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
         let values: Vec<Array1<f32>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
 
         for i in 0..num_pairs {
@@ -443,10 +449,10 @@ fn make_cross_attention_associative_recall_dataset(
 
     for b in 0..batch_size {
         let keys: Vec<Array1<f32>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
         let values: Vec<Array1<f32>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
 
         for i in 0..num_pairs {

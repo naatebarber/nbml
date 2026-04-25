@@ -3,14 +3,14 @@ use nbml::{
     nn::LinearSSM,
     optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
-use ndarray::{Array3, Axis, concatenate, s};
+use ndarray::{Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
 fn intermediate_caching() {
     let mut model = LinearSSM::new(4, 3, 3, he, he, he);
-    let x = Array3::random((2, 4, 3), Uniform::new(0., 1.));
-    let x2 = Array3::random((2, 4, 3), Uniform::new(0., 1.));
+    let x = Array3::random((2, 4, 3), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((2, 4, 3), Uniform::new(0., 1.).unwrap());
     let d = Array3::ones((2, 4, 3));
 
     model.forward(x.clone(), true);
@@ -39,12 +39,13 @@ fn intermediate_caching() {
 }
 
 fn generate_linear_recurrence(batch: usize, len: usize, feat: usize) -> Array3<f32> {
-    let seed = Array3::random((batch, 2, feat), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch, 2, feat), Uniform::new(-1., 1.).unwrap());
     let rest = Array3::zeros((batch, len - 2, feat));
     let mut seq = concatenate![Axis(1), seed.view(), rest.view()];
 
     for t in 2..len {
-        let next = 0.52 * &seq.slice(s![.., t - 1, ..]) + 0.48 * &seq.slice(s![.., t - 2, ..]);
+        let next: Array2<f32> =
+            0.52 * &seq.slice(s![.., t - 1, ..]) + 0.48 * &seq.slice(s![.., t - 2, ..]);
         seq.slice_mut(s![.., t, ..]).assign(&next);
     }
     seq

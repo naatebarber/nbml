@@ -114,7 +114,7 @@ pub fn d_softmax_cross_entropy(x: &Array2<f32>) -> Array2<f32> {
 
 pub fn he(shape: (usize, usize)) -> Array2<f32> {
     let bound = f32::sqrt(6.) / f32::sqrt(shape.0 as f32);
-    return Array2::random(shape, Uniform::new(-bound, bound));
+    return Array2::random(shape, Uniform::new(-bound, bound).unwrap());
 }
 
 pub fn xavier_normal(shape: (usize, usize)) -> Array2<f32> {
@@ -127,7 +127,7 @@ pub fn xavier_normal(shape: (usize, usize)) -> Array2<f32> {
 
 pub fn xavier(shape: (usize, usize)) -> Array2<f32> {
     let bound = (6. / (shape.0 as f32 + shape.1 as f32)).sqrt();
-    return Array2::random(shape, Uniform::new(-bound, bound));
+    return Array2::random(shape, Uniform::new(-bound, bound).unwrap());
 }
 
 // LOSSES
@@ -238,7 +238,7 @@ pub fn batch_mse_loss(logits: Array3<f32>, targets: Array3<f32>) -> (f32, Array3
 // NORM
 
 pub fn l2(x: &Array2<f32>) -> Array1<f32> {
-    let eps = 1e-12;
+    let eps = 1e-6;
     x.pow2().sum_axis(Axis(1)).sqrt().mapv(|x| x.max(eps))
 }
 

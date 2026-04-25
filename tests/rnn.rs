@@ -2,14 +2,14 @@ use nbml::{
     nn::RNN,
     optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
-use ndarray::{Array3, Axis, concatenate, s};
+use ndarray::{Array2, Array3, Axis, concatenate, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 
 #[test]
 fn intermediate_caching() {
     let mut model = RNN::new(4);
-    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.));
-    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.));
+    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
     let d = Array3::ones((2, 3, 4));
 
     model.forward(x.clone(), true);
@@ -47,7 +47,7 @@ fn rnn_sequence_pred() {
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-3;
 
-    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.).unwrap());
 
     let batch = Array3::zeros((batch_size, seq_len - 2, features));
     let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
@@ -56,8 +56,11 @@ fn rnn_sequence_pred() {
         let a = 0.52;
         let b = 0.48;
 
-        let next = a * &batch.slice(s![.., t - 1, ..]) + b * &batch.slice(s![.., t - 2, ..]);
-        batch.slice_mut(s![.., t, ..]).assign(&next);
+        let prev_1 = a * batch.slice(s![.., t - 1, ..]).to_owned();
+        let prev_2 = b * batch.slice(s![.., t - 2, ..]).to_owned();
+        let c: Array2<f32> = &prev_1 + &prev_2;
+
+        batch.slice_mut(s![.., t, ..]).assign(&c)
     }
 
     let x = batch.slice(s![.., 1..(seq_len - 1), ..]).to_owned();

@@ -1,6 +1,6 @@
 use ndarray::{Array, ArrayBase, ArrayD, DataMut, Dimension, IxDyn, RawArrayViewMut};
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Debug, fs, path::PathBuf};
+use std::{error::Error, fmt::Debug, fs};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TensorData {
@@ -99,15 +99,15 @@ pub trait ToParams {
         }
     }
 
-    fn persist(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
+    fn persist(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
         let params = self.dump();
-        fs::write(path.into(), bincode::serialize(&params)?)?;
+        fs::write(path, bincode::serialize(&params)?)?;
 
         Ok(())
     }
 
-    fn restore(&mut self, path: impl Into<PathBuf>) -> Result<(), Box<dyn Error>> {
-        let params = bincode::deserialize(&fs::read(path.into())?)?;
+    fn restore(&mut self, path: &str) -> Result<(), Box<dyn Error>> {
+        let params = bincode::deserialize(&fs::read(path)?)?;
         self.load(params);
 
         Ok(())

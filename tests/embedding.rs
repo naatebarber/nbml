@@ -14,7 +14,7 @@ fn learn_target_embeddings() {
     optim.learning_rate = 1e-2;
 
     // Target embeddings to learn
-    let targets = Array2::random((vocab_size, d_model), Uniform::new(-1., 1.));
+    let targets = Array2::random((vocab_size, d_model), Uniform::new(-1., 1.).unwrap());
 
     // Sequence with duplicate token: token 1 appears twice, gets 2x gradient signal
     let tokens = Array2::from_shape_vec((1, 4), vec![0, 1, 2, 1]).unwrap();

@@ -100,9 +100,9 @@ fn mean_pooling_numerical_gradient_check() {
     let eps = 1e-3;
     let (batch, seq, features) = (2, 4, 3);
 
-    let x = Array3::random((batch, seq, features), Uniform::new(-2.0, 2.0));
+    let x = Array3::random((batch, seq, features), Uniform::new(-2.0, 2.0).unwrap());
     let mask = array![[1.0, 1.0, 1.0, 0.0], [1.0, 1.0, 0.0, 0.0]];
-    let g = Array2::random((batch, features), Uniform::new(-1.0, 1.0));
+    let g = Array2::random((batch, features), Uniform::new(-1.0, 1.0).unwrap());
 
     let mut pool = SequencePooling::new();
     let _out = pool.forward(x.clone(), mask.clone(), true);

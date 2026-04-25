@@ -56,8 +56,8 @@ fn fixed_transform() {
     let mut optim = AdamW::default().with(&mut lin);
     optim.learning_rate = 2e-2;
 
-    let start = Array2::random((1, 5), Uniform::new(0., 1.));
-    let end = Array2::random((1, 5), Uniform::new(0., 1.));
+    let start = Array2::random((1, 5), Uniform::new(0., 1.).unwrap());
+    let end = Array2::random((1, 5), Uniform::new(0., 1.).unwrap());
 
     let mut loss = 0.;
     for e in 0..200 {

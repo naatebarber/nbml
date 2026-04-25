@@ -103,18 +103,18 @@ impl SNNReservoir {
             d_hidden,
 
             w_p: f::xavier((d_in, d_hidden)),
-            taus: Array1::random(d_hidden, Uniform::new(0., 1.)),
-            thresholds: Array1::random(d_hidden, Uniform::new(0., 1.)),
+            taus: Array1::random(d_hidden, Uniform::new(0., 1.).unwrap()),
+            thresholds: Array1::random(d_hidden, Uniform::new(0., 1.).unwrap()),
             w_r: f::xavier((d_hidden, d_hidden)),
         }
     }
 
     pub fn set_threshold_range(&mut self, low: f32, high: f32) {
-        self.thresholds = Array1::random(self.d_hidden, Uniform::new(low, high));
+        self.thresholds = Array1::random(self.d_hidden, Uniform::new(low, high).unwrap());
     }
 
     pub fn set_tau_range(&mut self, low: f32, high: f32) {
-        self.taus = Array1::random(self.d_hidden, Uniform::new(low, high));
+        self.taus = Array1::random(self.d_hidden, Uniform::new(low, high).unwrap());
     }
 
     pub fn set_spectral_radius(&mut self, desired: f32, n: usize) -> f32 {

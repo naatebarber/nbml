@@ -5,7 +5,7 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn softmax_rows_sum_to_one() {
     let mut softmax = Softmax::new();
-    let x = Array2::random((4, 8), Uniform::new(-3., 3.));
+    let x = Array2::random((4, 8), Uniform::new(-3., 3.).unwrap());
     let out = softmax.forward(x, false);
 
     for row in out.rows() {
@@ -17,7 +17,7 @@ fn softmax_rows_sum_to_one() {
 #[test]
 fn softmax_outputs_positive() {
     let mut softmax = Softmax::new();
-    let x = Array2::random((4, 8), Uniform::new(-10., 10.));
+    let x = Array2::random((4, 8), Uniform::new(-10., 10.).unwrap());
     let out = softmax.forward(x, false);
 
     assert!(
@@ -29,7 +29,7 @@ fn softmax_outputs_positive() {
 #[test]
 fn softmax_numerically_stable_with_large_values() {
     let mut softmax = Softmax::new();
-    let mut x = Array2::random((2, 5), Uniform::new(0., 1.));
+    let mut x = Array2::random((2, 5), Uniform::new(0., 1.).unwrap());
     x[[0, 0]] = 1000.0;
     x[[1, 2]] = -1000.0;
 
@@ -55,12 +55,12 @@ fn softmax_backward_numerical_gradient_check() {
     let (batch, features) = (3, 5);
 
     let mut softmax = Softmax::new();
-    let x = Array2::random((batch, features), Uniform::new(-2., 2.));
+    let x = Array2::random((batch, features), Uniform::new(-2., 2.).unwrap());
 
     let _out = softmax.forward(x.clone(), true);
 
     // upstream gradient
-    let g = Array2::random((batch, features), Uniform::new(-1., 1.));
+    let g = Array2::random((batch, features), Uniform::new(-1., 1.).unwrap());
     let analytic = softmax.backward(g.clone());
 
     // numerical: d/dx_ij of sum(g * softmax(x))

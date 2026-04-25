@@ -9,8 +9,8 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn delta_net_intermediate_caching() {
     let mut model = DeltaNet::new(4, 4);
-    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.));
-    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.));
+    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
     let d = Array3::ones((2, 3, 4));
 
     model.forward(x.clone(), true);

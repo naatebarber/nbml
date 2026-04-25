@@ -8,12 +8,12 @@ fn l2_norm_backward_numerical_gradient_check() {
     let (batch, features) = (3, 5);
 
     let mut l2_norm = L2Norm::new();
-    let x = Array2::random((batch, features), Uniform::new(-2., 2.));
+    let x = Array2::random((batch, features), Uniform::new(-2., 2.).unwrap());
 
     let _out = l2_norm.forward(x.clone(), true);
 
     // upstream gradient
-    let g = Array2::random((batch, features), Uniform::new(-1., 1.));
+    let g = Array2::random((batch, features), Uniform::new(-1., 1.).unwrap());
     let analytic = l2_norm.backward(g.clone());
 
     for i in 0..batch {

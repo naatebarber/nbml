@@ -16,7 +16,7 @@ fn rnn_reservoir_forward_and_step_same_value() {
     let reservoir = RNNReservoir::new(d_in, d_hidden);
     let mut readout = PositionwiseFFN::new(d_hidden, d_hidden, d_out);
 
-    let x = Array3::random((1, 12, d_in), Uniform::new(0., 1.));
+    let x = Array3::random((1, 12, d_in), Uniform::new(0., 1.).unwrap());
 
     // forward path
     let encoded = reservoir.forward(x.clone());
@@ -59,12 +59,13 @@ fn rnn_reservoir_sequence_pred() {
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 1e-2;
 
-    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.).unwrap());
     let batch = Array3::zeros((batch_size, seq_len - 2, features));
     let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
 
     for t in 2..batch.dim().1 {
-        let next = 0.52 * &batch.slice(s![.., t - 1, ..]) + 0.48 * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f32> =
+            0.52 * &batch.slice(s![.., t - 1, ..]) + 0.48 * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 
@@ -125,12 +126,13 @@ fn rnn_reservoir_sequence_pred_step() {
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 1e-2;
 
-    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.));
+    let seed = Array3::random((batch_size, 2, features), Uniform::new(-1., 1.).unwrap());
     let batch = Array3::zeros((batch_size, seq_len - 2, features));
     let mut batch = concatenate![Axis(1), seed.view(), batch.view()];
 
     for t in 2..batch.dim().1 {
-        let next = 0.52 * &batch.slice(s![.., t - 1, ..]) + 0.48 * &batch.slice(s![.., t - 2, ..]);
+        let next: Array2<f32> =
+            0.52 * &batch.slice(s![.., t - 1, ..]) + 0.48 * &batch.slice(s![.., t - 2, ..]);
         batch.slice_mut(s![.., t, ..]).assign(&next);
     }
 
@@ -207,7 +209,7 @@ fn snn_reservoir_temporal_classification() {
     let mut y = Array2::zeros((batch_size, 1));
 
     for b in 0..batch_size {
-        let noise = Array1::random(seq_len, Uniform::new(-0.05, 0.05));
+        let noise = Array1::random(seq_len, Uniform::new(-0.05, 0.05).unwrap());
         for t in 0..seq_len {
             let frac = t as f32 / seq_len as f32;
             let val = if b < samples_per_class {
@@ -292,7 +294,7 @@ fn snn_reservoir_heterogeneous_delta() {
     let mut optim = AdamW::default().with(&mut readout);
     optim.learning_rate = 5e-3;
 
-    let deltas = Array1::random(seq_len, Uniform::new(0.02, 0.3));
+    let deltas = Array1::random(seq_len, Uniform::new(0.02, 0.3).unwrap());
 
     let mut cum_time = vec![0.0f32; seq_len + 1];
     for t in 0..seq_len {
@@ -304,7 +306,7 @@ fn snn_reservoir_heterogeneous_delta() {
     let mut y = Array2::zeros((batch_size, 1));
 
     for b in 0..batch_size {
-        let noise = Array1::random(seq_len, Uniform::new(-0.05, 0.05));
+        let noise = Array1::random(seq_len, Uniform::new(-0.05, 0.05).unwrap());
         for t in 0..seq_len {
             let frac = cum_time[t + 1] / total_time;
             let val = if b < samples_per_class {

@@ -9,8 +9,8 @@ use ndarray_rand::{RandomExt, rand_distr::Uniform};
 #[test]
 fn gated_delta_net_intermediate_caching() {
     let mut model = GatedDeltaNet::new(4, 4, 4);
-    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.));
-    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.));
+    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
     let d = Array3::ones((2, 3, 4));
 
     model.forward(x.clone(), true);
@@ -89,7 +89,7 @@ fn gated_delta_net_gradient_check() {
 
 #[test]
 fn forward_and_step_compute_same_value() {
-    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.));
+    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.).unwrap());
 
     let mut gdn = GatedDeltaNet::new(16, 32, 16);
     let y_forward = gdn.forward(x.clone(), false);

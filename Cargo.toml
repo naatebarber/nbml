@@ -1,6 +1,6 @@
 [package]
 name = "nbml"
-version = "0.6.4"
+version = "0.7.0"
 edition = "2024"
 repository = "https://github.com/naatebarber/nbml"
 homepage = "https://github.com/naatebarber/nbml"
@@ -9,9 +9,9 @@ description = "Machine Learning Primitives"
 readme = "README.md"
 
 [dependencies]
-ndarray = { version = "0.16.1", features = ["serde"] }
-ndarray-rand = "0.15.0"
-ndarray-stats = "0.6.0"
+ndarray = { version = "0.17.2", features = ["serde"] }
+ndarray-rand = "0.16.0"
+ndarray-stats = "0.7.0"
 rand = "0.9.2"
 serde = { version = "1.0.228", features = ["derive", "rc"] }
 plotly = "0.12.1"

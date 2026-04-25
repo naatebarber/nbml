@@ -10,8 +10,8 @@ use rand::{rng, seq::IteratorRandom};
 #[test]
 fn linear_attention_intermediate_caching() {
     let mut model = LinearAttention::new(4, 4);
-    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.));
-    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.));
+    let x = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
+    let x2 = Array3::random((2, 3, 4), Uniform::new(0., 1.).unwrap());
     let d = Array3::ones((2, 3, 4));
 
     model.forward(x.clone(), true);
@@ -149,10 +149,10 @@ fn make_associative_recall_dataset(
 
     for b in 0..batch_size {
         let keys: Vec<Array1<f32>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
         let values: Vec<Array1<f32>> = (0..num_pairs)
-            .map(|_| Array1::random(d_model, Uniform::new(0., 10.)))
+            .map(|_| Array1::random(d_model, Uniform::new(0., 10.).unwrap()))
             .collect();
 
         for i in 0..num_pairs {
@@ -219,7 +219,7 @@ fn linear_attention_associative_recall() {
 
 #[test]
 fn linear_attention_forward_and_step_compute_same_value() {
-    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.));
+    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.).unwrap());
 
     let mut attn = LinearAttention::new(16, 32);
     let y_forward = attn.forward(x.clone(), false);
