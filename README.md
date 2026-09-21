@@ -15,8 +15,8 @@ Unlike high-level frameworks, `nbml` provides bare primitives and a lightweight 
 
 ## Quick Start
 ```rust
+use nbml::f::{self, Activation};
 use nbml::nn::FFN;
-use nbml::f::Activation;
 use nbml::optim::{AdamW, Optimizer, ToParams};
 
 // Build a simple feedforward network
@@ -28,15 +28,19 @@ let mut model = FFN::new(vec![
 // Create optimizer
 let mut optimizer = AdamW::default().with(&mut model);
 
-// Training loop (simplified)
-for batch in training_data {
-    let output = model.forward(batch.x, true);
-    let loss = cross_entropy(&output, &batch.y);
-    let grad = model.backward(loss);
+// Training loop, where x is (batch_size, 784) and y is (batch_size, 1)
+for (x, y) in training_data {
+    let y_pred = model.forward(x, true);           // grad = true, cache activations
+    let (loss, d_loss) = f::bce_loss(&y_pred, &y); // scalar loss + dL/dy_pred
+    model.backward(d_loss);
     optimizer.step(&mut model);
     model.zero_grads();
 }
 ```
+
+Losses in `nbml::f` all return `(loss, d_loss)` — the scalar you log and the gradient you feed
+straight back into `backward()`. See `f::mse_loss`, `f::bce_loss`, `f::cross_entropy_loss`, and
+their `batch_*` counterparts for 3D (batched sequence) inputs.
 
 ## Architecture
 
@@ -44,6 +48,7 @@ for batch in training_data {
 
 - **`Layer`**: Single nonlinear projection layer
 - **`FFN`**: Feedforward network with configurable layers
+- **`PositionwiseFFN`**: Two-layer position-wise feedforward block (used by the transformers)
 - **`RNN`**: Vanilla recurrent neural network
 - **`LSTM`**: Long Short-Term Memory Network
 - **`GRU`**: Gated Recurrent Unit
@@ -62,10 +67,15 @@ for batch in training_data {
 - **`DeltaNet`**: Linear attention with delta rule for error-corrected state updates ([Yang et al., 2024](https://arxiv.org/abs/2406.06484))
 - **`GatedDeltaNet`**: Gated delta network combining data-dependent gating with delta rule updates ([Yang et al., 2025](https://arxiv.org/abs/2412.06464))
 - **`Transformer`**: Transformer encoder/decoder block
-- **`LinearTransformer`**: Transformer block using linear self attention instead of softmax attention
-- **`GlaTransformer`**: Transformer block using gated linear attention.
-- **`DeltaNetTransformer`**: Transformer block using DeltaNet linear attention.
-- **`GdnTransformer`**: Transformer block using Gated DeltaNet linear attention.
+- **`LinearTransformerBase<A>`**: Transformer block generic over any `LinearAttentionLike` mixer, with these aliases:
+  - **`LinearTransformer`**: `LinearTransformerBase<LinearAttention>`
+  - **`GlaTransformer`**: `LinearTransformerBase<GatedLinearAttention>`
+  - **`DeltaNetTransformer`**: `LinearTransformerBase<DeltaNet>`
+  - **`GdnTransformer`**: `LinearTransformerBase<GatedDeltaNet>`
+
+`nbml::nn::experimental` holds work-in-progress modules (`SelectiveSSM`, `DenseSelectiveSSM`,
+`LinearCrossAttention`). It is not re-exported from `nbml::nn`, so import it by full path. Expect
+its API to change.
 
 ### Layers (`nbml::layers`)
 
@@ -79,6 +89,23 @@ Layers that are only useful as components of other modules:
 - **`LayerNorm`**: Layer normalization
 - **`SequencePooling`**: Sequence mean-pooling
 - **`LastTokenPooling`**: Last-token pooling, selects last token output only. For causal tasks.
+
+### Modeling (`nbml::modeling`)
+
+Thin wrappers that assemble primitives into a full model.
+
+- **`CausalLM<M>`**: Embedding → sequence model → LM head, with `train_step()` wiring up cross
+  entropy. `M` is any type you implement `CausalSequenceModel` for (see the example below).
+
+### Utilities (`nbml::util`)
+
+- **`batch_with_mask`**: Pad a `Vec<Array2<f32>>` of variable-length sequences into a single
+  `(Array3<f32>, Array2<f32>)` batch + pad mask
+- **`Bench`**: MSE / NMSE / R² / Pearson r scoring helpers
+- **`plot`, `plot_pair`**: Quick plotly line plots for debugging training runs
+
+`nbml` also re-exports `ndarray`, `ndarray_rand`, and `ndarray_stats`, so you don't have to pin
+matching versions yourself: `use nbml::ndarray::Array3;`
 
 ### Optimizers (`nbml::optim`)
 
@@ -133,6 +160,18 @@ optimizer.step(&mut aa);
 aa.zero_grads();
 ```
 
+Because `params()` already enumerates every weight in the tree, `ToParams` gets serialization for
+free — `dump()`/`load()` move weights through `Vec<TensorData>`, and `persist()`/`restore()` do the
+same via a bincode file:
+
+```rust
+let mut lstm = LSTM::new(128);
+lstm.persist("./lstm.bin")?;
+
+let mut restored = LSTM::new(128);
+restored.restore("./lstm.bin")?; // same architecture, weights copied in place
+```
+
 Available optimizers:
 - **`AdamW`**: Adaptive moment estimation with weight decay
 - **`SGD`**: Stochastic gradient descent
@@ -141,6 +180,7 @@ Use `.with(&mut impl ToParams)` to initialize a stateful optimizer (like AdamW) 
 ```rust
 let mut model = AffineAffine::new();
 let mut optim = AdamW::default().with(&mut model); // creates momentum/variance state for all parameters
+optim.learning_rate = 1e-3;
 ```
 
 #### `ToIntermediates`
@@ -178,17 +218,22 @@ model.apply_intermediates(stash_a);
 model.backward(d_loss_a); // correct grads for A
 ```
 
-Intermediates are returned from `stash_intermediates` as `Vec<ArrayD<T>>` - aliased as `IntermediateCache`.
+Intermediates are returned from `stash_intermediates` as `Vec<ArrayD<f32>>` - aliased as `IntermediateCache`.
 
 ### Activation Functions (`nbml::f`)
 ```rust
 use nbml::f;
+use nbml::ndarray::array;
 
-let x = Array2::from_vec(vec![-1.0, 0.0, 1.0]);
+let x = array![[-1.0, 0.0, 1.0]]; // activations operate on 2D arrays
 let activated = f::relu(&x);
 ```
 
 Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
+
+`f::Activation` is the enum form used by `Layer`/`FFN`. Each variant carries its forward fn,
+derivative, and weight initializer: `Relu`, `LeakyRelu`, `SoftmaxCrossEntropy`, `Identity`, `Exp`,
+`Sigmoid`, `Tanh`, `Softplus`.
 
 ## Design Philosophy
 
@@ -208,6 +253,12 @@ Includes derivatives for backpropagation: `d_relu`, `d_tanh`, `d_sigmoid`, etc.
 The included `nn` primitives are technically plug and play, but when composing them you will have to wire `backward()` yourself.
 
 ```rust
+use nbml::f::Activation;
+use nbml::layers::SequencePooling;
+use nbml::ndarray::{Array2, Array3};
+use nbml::nn::{GlaTransformer, Layer};
+use nbml::optim::{Param, ToParams};
+
 pub struct SequenceClassifier {
     pub transformer: GlaTransformer,
     pub pooling: SequencePooling,
@@ -215,24 +266,35 @@ pub struct SequenceClassifier {
 }
 
 impl SequenceClassifier {
-    pub fn new(d_model: usize) -> Self { ... }
+    pub fn new(d_model: usize, d_head: usize, n_class: usize) -> Self {
+        Self {
+            transformer: GlaTransformer::new(d_model, d_head),
+            pooling: SequencePooling::new(),
+            readout: Layer::new(d_model, n_class, Activation::SoftmaxCrossEntropy),
+        }
+    }
 
-    pub fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array2<f32> {
-        // on-the-spot mask
-        let mask = Array3::ones((x.dim().0, x.dim().1, x.dim().1));
-        let x = self.transformer.forward(x, mask.clone(), grad); // (B, S, D)
-        let x = self.pooling.forward(x, mask); // (B, D)
-        let x = self.readout.forward(x); // (B, D)
-
-        x
+    // mask is the (B, S) pad mask, 1. for real tokens and 0. for padding.
+    // Linear attention is inherently causal, so there is no attention mask to build.
+    pub fn forward(&mut self, x: Array3<f32>, mask: Array2<f32>, grad: bool) -> Array2<f32> {
+        let x = self.transformer.forward(x, grad);   // (B, S, D)
+        let x = self.pooling.forward(x, mask, grad); // (B, D)
+        self.readout.forward(x, grad)                // (B, n_class)
     }
 
     pub fn backward(&mut self, d_loss: Array2<f32>) -> Array3<f32> {
-        let d_loss = self.readout.backward(d_loss); // (B, D)
-        let d_loss = self.pooling.backward(d_loss); // (B, S, D)
-        let d_loss = self.transformer.backward(d_loss); // (B, S, D)
+        let d_loss = self.readout.backward(d_loss);  // (B, D)
+        let d_loss = self.pooling.backward(d_loss);  // (B, S, D)
+        self.transformer.backward(d_loss)            // (B, S, D)
+    }
+}
 
-        d_loss
+impl ToParams for SequenceClassifier {
+    fn params(&mut self) -> Vec<Param> {
+        let mut params = vec![];
+        params.append(&mut self.transformer.params());
+        params.append(&mut self.readout.params());
+        params
     }
 }
 ```
@@ -241,6 +303,7 @@ impl SequenceClassifier {
 
 ### Custom LSTM Training
 ```rust
+use nbml::f;
 use nbml::nn::LSTM;
 use nbml::optim::{AdamW, Optimizer, ToParams};
 
@@ -252,10 +315,10 @@ let mut optimizer = AdamW::default().with(&mut lstm);
 // where batch.dim() is (batch_size, seq_len, features)
 // and features == lstm.d_model == (128 in this case)
 
-for batch in data {
+for (batch, target) in data {
     let output = lstm.forward(batch, true);
-    let loss = compute_loss(&output, &target);
-    let grad = lstm.backward(loss);
+    let (loss, d_loss) = f::batch_mse_loss(output, target);
+    lstm.backward(d_loss);
     optimizer.step(&mut lstm);
     lstm.zero_grads();
 }
@@ -275,12 +338,12 @@ let mut attention = SelfAttention::new(
 // features == d_in == (512 in this case)
 // and mask == (batch_size, seq_len, seq_len)
 // with each element as 1. or 0. depending on whether or not the token
-// is padding
+// is attendable
 
 let output = attention.forward(
     input, // (batch_size, seq_len, features)
     mask,  // binary mask, (batch_size, seq_len, seq_len)
-    true    // grad
+    true   // grad
 );
 ```
 
@@ -288,6 +351,7 @@ let output = attention.forward(
 ```rust
 use nbml::nn::Transformer;
 use nbml::ndarray::Array3;
+use nbml::optim::ToParams;
 
 let mut transformer = Transformer::new_decoder(
     512,  // d_in
@@ -295,10 +359,14 @@ let mut transformer = Transformer::new_decoder(
     8,    // n_head
 );
 
+// Transformer takes a 2D pad mask, not a full attention mask. It broadcasts the
+// pad mask to (batch_size, seq_len, seq_len) internally, and for decoders it
+// intersects that with a causal mask for you. `pad_mask()` and `causal_mask()`
+// are public if you want the expanded masks yourself.
 let y_pred = transformer.forward(
-    input, // (batch_size, seq_len, features)
-    mask,  // binary mask, (batch_size, seq_len, seq_len)
-    true    // grad
+    input,    // (batch_size, seq_len, features)
+    pad_mask, // binary pad mask, (batch_size, seq_len)
+    true      // grad
 );
 
 // some bs.
@@ -306,3 +374,117 @@ let d_y_pred = Array3::ones(y_pred.dim());
 transformer.backward(d_y_pred);
 transformer.zero_grads();
 ```
+
+### KV Cached Decoding
+
+`Transformer::forward_cached` (decoders only) appends to caller-owned K/V caches so incremental
+decoding doesn't re-attend over the whole prefix. It runs with `grad = false` throughout — it's for
+inference, not training.
+
+```rust
+use nbml::nn::Transformer;
+use nbml::ndarray::{Array2, Array3, Axis, concatenate, s};
+
+let (batch_size, seq_len, d_model, d_head, n_head) = (2, 8, 64, 16, 4);
+let mut model = Transformer::new_decoder(d_model, d_head, n_head);
+
+// x is (batch_size, seq_len, d_model)
+
+// caches are (batch_size * n_head, cached_seq_len, d_head), starting empty
+let mut k_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+let mut v_cache = Array3::zeros((batch_size * n_head, 0, d_head));
+
+let mut y = Array3::zeros((batch_size, 0, d_model));
+for t in 0..seq_len {
+    let x_t = x.slice(s![.., t..t + 1, ..]).to_owned();
+    let pad_mask = Array2::ones((batch_size, 1));
+
+    // caches grow by one step per call
+    let y_t = model.forward_cached(x_t, pad_mask, &mut k_cache, &mut v_cache);
+    y = concatenate![Axis(1), y.view(), y_t.view()];
+}
+```
+
+`SelfAttention::forward_cached` and `Attention::forward_cached` expose the same mechanism one level
+down, if you're assembling your own decoder.
+
+### Causal Language Model
+
+`CausalLM<M>` bolts an `Embedding` and an LM head onto any sequence model that implements
+`CausalSequenceModel`. Because of the orphan rule you implement that trait on your own type:
+
+```rust
+use nbml::modeling::causal_lm::{CausalLM, CausalSequenceModel};
+use nbml::ndarray::{Array2, Array3};
+use nbml::nn::Transformer;
+use nbml::optim::{AdamW, Optimizer, Param, ToParams};
+
+pub struct Decoder {
+    blocks: Vec<Transformer>,
+}
+
+impl CausalSequenceModel for Decoder {
+    fn new(d_model: usize) -> Self {
+        Self {
+            blocks: (0..4)
+                .map(|_| Transformer::new_decoder(d_model, d_model / 4, 4))
+                .collect(),
+        }
+    }
+
+    fn forward(&mut self, mut x: Array3<f32>, mask: Array2<f32>, grad: bool) -> Array3<f32> {
+        for block in self.blocks.iter_mut() {
+            x = block.forward(x, mask.clone(), grad);
+        }
+        x
+    }
+
+    fn backward(&mut self, mut d_loss: Array3<f32>) -> Array3<f32> {
+        for block in self.blocks.iter_mut().rev() {
+            d_loss = block.backward(d_loss);
+        }
+        d_loss
+    }
+}
+
+impl ToParams for Decoder {
+    fn params(&mut self) -> Vec<Param> {
+        let mut params = vec![];
+        self.blocks
+            .iter_mut()
+            .for_each(|b| params.append(&mut b.params()));
+        params
+    }
+}
+
+let mut lm = CausalLM::<Decoder>::new(32_000, 256); // vocab_size, d_model
+let mut optim = AdamW::default().with(&mut lm);
+
+// tokens / targets are (batch_size, seq_len) token ids, pad_mask is (batch_size, seq_len)
+let loss = lm.train_step(tokens, targets, pad_mask); // forward + cross entropy + backward
+optim.step(&mut lm);
+lm.zero_grads();
+```
+
+### Variable Length Batching
+```rust
+use nbml::util::batch_with_mask;
+
+// sequences: Vec<Array2<f32>>, each (seq_len_i, features)
+let (x, pad_mask) = batch_with_mask(sequences);
+// x        -> (batch_size, max_seq_len, features), zero padded
+// pad_mask -> (batch_size, max_seq_len), 1. for real steps and 0. for padding
+```
+
+### Runnable Examples
+
+`examples/` has end-to-end programs you can run directly:
+
+```
+cargo run --example xor
+```
+
+## Features / Build Flags
+
+- `blas` — routes ndarray's matmuls through BLAS. On macOS the Accelerate framework is wired up
+  by default via `blas-src`.
