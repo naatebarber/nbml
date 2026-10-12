@@ -238,6 +238,42 @@ pub fn batch_mse_loss(logits: Array3<f32>, targets: Array3<f32>) -> (f32, Array3
     (loss, d_loss)
 }
 
+// Measurement
+
+pub fn roc_auc_score(y_true: Array2<f32>, y_scores: Array2<f32>) -> f32 {
+    assert_eq!(y_true.len(), y_scores.len(), "y_true and y_scores must have the same length");
+
+    let mut pairs: Vec<(f32, bool)> = y_scores
+        .iter()
+        .zip(y_true.iter())
+        .map(|(&s, &y)| (s, y > 0.5))
+        .collect();
+    pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let n_pos = pairs.iter().filter(|p| p.1).count();
+    let n_neg = pairs.len() - n_pos;
+    if n_pos == 0 || n_neg == 0 {
+        return f32::NAN; // undefined with a single class
+    }
+
+    // Mann-Whitney U, sum of the positives ranks, ties given their average rank
+    let mut rank_sum_pos = 0f64;
+    let mut i = 0;
+    while i < pairs.len() {
+        let mut j = i;
+        while j < pairs.len() && pairs[j].0 == pairs[i].0 {
+            j += 1;
+        }
+        let avg_rank = (i + 1 + j) as f64 / 2.0; // ranks i+1 ..= j
+        let n_pos_tied = pairs[i..j].iter().filter(|p| p.1).count();
+        rank_sum_pos += avg_rank * n_pos_tied as f64;
+        i = j;
+    }
+
+    let u = rank_sum_pos - (n_pos * (n_pos + 1)) as f64 / 2.0;
+    (u / (n_pos as f64 * n_neg as f64)) as f32
+}
+
 // NORM
 
 pub fn l2(x: &ArrayRef2<f32>) -> Array1<f32> {
