@@ -1,7 +1,5 @@
 pub mod batch;
-pub mod bench;
-pub mod graph;
+pub mod score;
 
 pub use batch::*;
-pub use bench::Bench;
-pub use graph::*;
+pub use score::*;

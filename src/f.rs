@@ -12,19 +12,19 @@ pub type InitializationFn = fn((usize, usize)) -> Array2<f32>;
 // ACTIVATIONS
 
 pub fn relu(x: &ArrayRef2<f32>) -> Array2<f32> {
-    x.mapv(|v| v.max(0.))
+    x.mapv(|v: f32| v.max(0.))
 }
 
 pub fn d_relu(x: &ArrayRef2<f32>) -> Array2<f32> {
-    x.mapv(|v| v.signum().max(0.))
+    x.mapv(|v: f32| v.signum().max(0.))
 }
 
 pub fn tanh(x: &ArrayRef2<f32>) -> Array2<f32> {
-    x.mapv(|v| v.tanh())
+    x.mapv(|v: f32| v.tanh())
 }
 
 pub fn d_tanh(x: &ArrayRef2<f32>) -> Array2<f32> {
-    1. - (x.mapv(|v| v.tanh())).powi(2)
+    1. - (x.mapv(|v: f32| v.tanh())).powi(2)
 }
 
 pub fn leaky_relu(x: &ArrayRef2<f32>) -> Array2<f32> {
@@ -58,7 +58,7 @@ pub fn d_elu(x: &ArrayRef2<f32>) -> Array2<f32> {
 }
 
 pub fn softplus(x: &ArrayRef2<f32>) -> Array2<f32> {
-    x.mapv(|v| if v > 20.0 { v } else { (1.0 + v.exp()).ln() })
+    x.mapv(|v: f32| if v > 20.0 { v } else { (1.0 + v.exp()).ln() })
 }
 
 pub fn d_softplus(x: &ArrayRef2<f32>) -> Array2<f32> {
@@ -74,7 +74,7 @@ pub fn d_ident(x: &ArrayRef2<f32>) -> Array2<f32> {
 }
 
 pub fn sigmoid(x: &ArrayRef2<f32>) -> Array2<f32> {
-    x.mapv(|v| 1.0 / (1.0 + (-v).exp()))
+    x.mapv(|v: f32| 1.0 / (1.0 + (-v).exp()))
 }
 
 pub fn d_sigmoid(x: &ArrayRef2<f32>) -> Array2<f32> {
@@ -136,7 +136,7 @@ pub fn soft_cross_entropy_loss(
     probs: &ArrayRef2<f32>,
     targets: &ArrayRef2<f32>,
 ) -> (f32, Array2<f32>) {
-    let log_probs = probs.mapv(|p| p.max(1e-10).ln());
+    let log_probs = probs.mapv(|p: f32| p.max(1e-10).ln());
     let loss = -(targets * log_probs).sum() / probs.dim().0 as f32;
 
     let d_loss = probs - targets;
@@ -163,7 +163,9 @@ pub fn cross_entropy_loss(logits: Array3<f32>, labels: &Array2<usize>) -> (f32, 
     // numerical stability, subtract max per position
     let max_logits = logits
         .map_axis(Axis(2), |row| {
-            *row.iter().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap()
+            *row.iter()
+                .max_by(|a: &&f32, b: &&f32| a.partial_cmp(b).unwrap())
+                .unwrap()
         })
         .insert_axis(Axis(2));
     let shifted = &logits - &max_logits;
@@ -197,13 +199,13 @@ pub fn bce_loss(sigmoid_probs: &ArrayRef2<f32>, targets: &ArrayRef2<f32>) -> (f3
     let eps = 1e-10;
     let n = sigmoid_probs.len() as f32;
 
-    let loss = -(targets * sigmoid_probs.mapv(|p| p.max(eps).ln())
-        + (1.0 - targets) * &sigmoid_probs.mapv(|p| (1.0 - p).max(eps).ln()))
+    let loss = -(targets * sigmoid_probs.mapv(|p: f32| p.max(eps).ln())
+        + (1.0 - targets) * &sigmoid_probs.mapv(|p: f32| (1.0 - p).max(eps).ln()))
         .sum()
         / n;
 
     let d_loss = (sigmoid_probs - targets)
-        / &(sigmoid_probs * (1.0 - sigmoid_probs)).mapv(|v| v.max(eps))
+        / &(sigmoid_probs * (1.0 - sigmoid_probs)).mapv(|v: f32| v.max(eps))
         / n;
 
     (loss, d_loss)
@@ -238,47 +240,11 @@ pub fn batch_mse_loss(logits: Array3<f32>, targets: Array3<f32>) -> (f32, Array3
     (loss, d_loss)
 }
 
-// Measurement
-
-pub fn roc_auc_score(y_true: Array2<f32>, y_scores: Array2<f32>) -> f32 {
-    assert_eq!(y_true.len(), y_scores.len(), "y_true and y_scores must have the same length");
-
-    let mut pairs: Vec<(f32, bool)> = y_scores
-        .iter()
-        .zip(y_true.iter())
-        .map(|(&s, &y)| (s, y > 0.5))
-        .collect();
-    pairs.sort_by(|a, b| a.0.total_cmp(&b.0));
-
-    let n_pos = pairs.iter().filter(|p| p.1).count();
-    let n_neg = pairs.len() - n_pos;
-    if n_pos == 0 || n_neg == 0 {
-        return f32::NAN; // undefined with a single class
-    }
-
-    // Mann-Whitney U, sum of the positives ranks, ties given their average rank
-    let mut rank_sum_pos = 0f64;
-    let mut i = 0;
-    while i < pairs.len() {
-        let mut j = i;
-        while j < pairs.len() && pairs[j].0 == pairs[i].0 {
-            j += 1;
-        }
-        let avg_rank = (i + 1 + j) as f64 / 2.0; // ranks i+1 ..= j
-        let n_pos_tied = pairs[i..j].iter().filter(|p| p.1).count();
-        rank_sum_pos += avg_rank * n_pos_tied as f64;
-        i = j;
-    }
-
-    let u = rank_sum_pos - (n_pos * (n_pos + 1)) as f64 / 2.0;
-    (u / (n_pos as f64 * n_neg as f64)) as f32
-}
-
 // NORM
 
 pub fn l2(x: &ArrayRef2<f32>) -> Array1<f32> {
     let eps = 1e-6;
-    x.pow2().sum_axis(Axis(1)).sqrt().mapv(|x| x.max(eps))
+    x.pow2().sum_axis(Axis(1)).sqrt().mapv(|x: f32| x.max(eps))
 }
 
 pub fn l2_norm(x: &ArrayRef2<f32>) -> Array2<f32> {
@@ -354,7 +320,7 @@ pub fn log_softmax(x: Array2<f32>) -> Array2<f32> {
 }
 
 pub fn clip_grad(mut grad: Array2<f32>, clip: f32) -> Array2<f32> {
-    let norm_sq = grad.mapv(|x| x * x).sum();
+    let norm_sq: f32 = grad.mapv(|x| x * x).sum();
     let norm = norm_sq.sqrt();
 
     if norm > clip {
@@ -404,10 +370,10 @@ pub fn gaussian_log_prob(
 ) -> Array1<f32> {
     let eps = 1e-8;
     let quadratic = (x - u).powi(2) / o.powi(2);
-    let norm = 2. * o.map(|v| v.max(eps).ln());
+    let norm = 2. * o.map(|v: &f32| v.max(eps).ln());
     let constant = (f32::consts::PI * 2.).ln();
 
-    let dims = -0.5 * (quadratic + norm + constant);
+    let dims: Array2<f32> = -0.5 * (quadratic + norm + constant);
 
     dims.sum_axis(Axis(1))
 }
@@ -418,8 +384,8 @@ pub fn tanh_gaussian_correction(a_raw: &ArrayRef2<f32>) -> Array1<f32> {
 }
 
 pub fn tanh_gaussian_correction_eps(a_raw: &ArrayRef2<f32>) -> Array1<f32> {
-    let deriv = 1.0 - a_raw.mapv(|u| u.tanh().powi(2)); // d_tanh(u)
-    deriv.mapv(|v| (v + 1e-8).ln()).sum_axis(Axis(1))
+    let deriv = 1.0 - a_raw.mapv(|u: f32| u.tanh().powi(2)); // d_tanh(u)
+    deriv.mapv(|v: f32| (v + 1e-8).ln()).sum_axis(Axis(1))
 }
 
 pub fn calculate_spectral_radius(w_r: &ArrayRef2<f32>, n: usize) -> f32 {
