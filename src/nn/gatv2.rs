@@ -8,7 +8,7 @@ use ndarray_rand::{RandomExt, rand_distr::Normal};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Default, Clone)]
-pub struct GATv2LayerCache {
+pub struct GATv2Cache {
     pub s: Array2<f32>,
     pub r: Array2<f32>,
     pub alpha: Array2<f32>,
@@ -18,12 +18,12 @@ pub struct GATv2LayerCache {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct GATv2LayerGrads {
+pub struct GATv2Grads {
     pub d_a: Array2<f32>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct GATv2Layer {
+pub struct GATv2 {
     pub d_in: usize,
     pub d_head: usize,
     pub n_head: usize,
@@ -35,12 +35,12 @@ pub struct GATv2Layer {
     pub a: Array2<f32>,
 
     #[serde(skip)]
-    pub cache: GATv2LayerCache,
+    pub cache: GATv2Cache,
     #[serde(skip)]
-    pub grads: GATv2LayerGrads,
+    pub grads: GATv2Grads,
 }
 
-impl GATv2Layer {
+impl GATv2 {
     pub fn new(d_in: usize, d_head: usize, n_head: usize, d_out: usize) -> Self {
         Self {
             d_in,
@@ -53,8 +53,8 @@ impl GATv2Layer {
             o_proj: Linear::new(n_head * d_head, d_out),
             a: Array2::random((n_head, d_head), Normal::new(0., 1.).unwrap()),
 
-            cache: GATv2LayerCache::default(),
-            grads: GATv2LayerGrads::default(),
+            cache: GATv2Cache::default(),
+            grads: GATv2Grads::default(),
         }
     }
 
@@ -122,9 +122,9 @@ impl GATv2Layer {
 
         // ragged softmax
 
-        let m = GATv2Layer::scatter_max(&scores, &recv, n).select(Axis(0), &recv); // (e, n_head)
+        let m = GATv2::scatter_max(&scores, &recv, n).select(Axis(0), &recv); // (e, n_head)
         let exp = (&scores - &m).exp(); // (e, n_head)
-        let denom = GATv2Layer::scatter_sum(&exp, &recv, n).select(Axis(0), &recv); // (e, n_head)
+        let denom = GATv2::scatter_sum(&exp, &recv, n).select(Axis(0), &recv); // (e, n_head)
         let alpha = &exp / &denom;
 
         if grad {
@@ -145,7 +145,7 @@ impl GATv2Layer {
 
         // sum into receivers
 
-        let agg = GATv2Layer::scatter_sum(&msg, &recv, n); // (e, ..) -> (n, d_head * n_head)
+        let agg = GATv2::scatter_sum(&msg, &recv, n); // (e, ..) -> (n, d_head * n_head)
 
         // output proj
 
@@ -185,7 +185,7 @@ impl GATv2Layer {
         // ragged softmax
 
         let ag = alpha * &d_alpha; // (e, n_head)
-        let row = GATv2Layer::scatter_sum(&ag, &recv, n).select(Axis(0), &recv); // (e, n_head)
+        let row = GATv2::scatter_sum(&ag, &recv, n).select(Axis(0), &recv); // (e, n_head)
         let d_scores = alpha * &(&d_alpha - &row); // (e, n_head)
 
         // scores
@@ -215,8 +215,8 @@ impl GATv2Layer {
             .unwrap();
 
         // backward of the gathers (= scatter-sum by the same index)
-        let d_x_s = GATv2Layer::scatter_sum(&d_s, &send, n); // (n, n_head * d_head)
-        let d_x_r = GATv2Layer::scatter_sum(&d_r, &recv, n); // ..
+        let d_x_s = GATv2::scatter_sum(&d_s, &send, n); // (n, n_head * d_head)
+        let d_x_r = GATv2::scatter_sum(&d_r, &recv, n); // ..
 
         self.grads.d_a += &d_a;
         let d_x1 = self.s_proj.backward(d_x_s);
@@ -225,7 +225,7 @@ impl GATv2Layer {
     }
 }
 
-impl ToParams for GATv2Layer {
+impl ToParams for GATv2 {
     fn params(&mut self) -> Vec<crate::optim::Param> {
         let mut params = vec![];
 

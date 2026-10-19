@@ -1,4 +1,4 @@
-use nbml::nn::GATv2Layer;
+use nbml::nn::GATv2;
 use ndarray::{Array2, array};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand::{SeedableRng, rngs::StdRng};
@@ -7,10 +7,10 @@ use ndarray_rand::rand_distr::Normal;
 const EPS: f32 = 5e-3;
 
 /// 4 nodes, self-loops on every node, plus a few cross edges. Rows are (src, dst).
-fn setup() -> (GATv2Layer, Array2<f32>, Array2<usize>, Array2<f32>) {
+fn setup() -> (GATv2, Array2<f32>, Array2<usize>, Array2<f32>) {
     let mut rng = StdRng::seed_from_u64(0);
     let (n, d_in, d_head, n_head, d_out) = (4, 3, 2, 2, 3);
-    let layer = GATv2Layer::new(d_in, d_head, n_head, d_out);
+    let layer = GATv2::new(d_in, d_head, n_head, d_out);
     let x = Array2::random_using((n, d_in), Normal::new(0f32, 1f32).unwrap(), &mut rng);
     let index = array![
         [0, 0],
@@ -29,7 +29,7 @@ fn setup() -> (GATv2Layer, Array2<f32>, Array2<usize>, Array2<f32>) {
     (layer, x, index, w)
 }
 
-fn loss(layer: &mut GATv2Layer, x: &Array2<f32>, index: &Array2<usize>, w: &Array2<f32>) -> f32 {
+fn loss(layer: &mut GATv2, x: &Array2<f32>, index: &Array2<usize>, w: &Array2<f32>) -> f32 {
     let out = layer.forward(x.clone(), index, false);
     (&out * w).sum()
 }
@@ -48,7 +48,7 @@ fn alpha_rows_sum_to_one() {
     let (mut layer, x, index, _) = setup();
     layer.forward(x, &index, true);
     let recv = index.column(1).to_vec();
-    let sums = GATv2Layer::scatter_sum(&layer.cache.alpha, &recv, 4);
+    let sums = GATv2::scatter_sum(&layer.cache.alpha, &recv, 4);
     for v in sums.iter() {
         assert!((v - 1.0).abs() < 1e-5, "row sum {v}");
     }
