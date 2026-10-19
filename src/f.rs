@@ -1,5 +1,3 @@
-use core::f32;
-
 use ndarray::{Array1, Array2, Array3, ArrayRef2, Axis, s};
 use ndarray_rand::{RandomExt, rand_distr::Uniform};
 use ndarray_stats::QuantileExt;
@@ -220,6 +218,47 @@ pub fn batch_bce_loss(sigmoid_probs: Array3<f32>, targets: Array3<f32>) -> (f32,
     (loss, d_loss)
 }
 
+pub fn bce_with_logits(logits: &ArrayRef2<f32>, targets: &ArrayRef2<f32>) -> (f32, Array2<f32>) {
+    let n = logits.len() as f32;
+    // -log p = softplus(-x), -log(1-p) = softplus(x)
+    let loss = (targets * softplus(&-logits) + (1.0 - targets) * softplus(&logits)).sum() / n;
+    let d_logits = (sigmoid(&logits) - targets) / n;
+    (loss, d_logits)
+}
+
+/// Focal loss on raw logits, hard 0/1 targets. Returns (mean loss, dL/dlogits).
+/// alpha ~ 0.25, gamma ~ 2.0
+pub fn focal_with_logits(
+    logits: &ArrayRef2<f32>,
+    targets: &ArrayRef2<f32>,
+    alpha: f32,
+    gamma: f32,
+) -> (f32, Array2<f32>) {
+    let n = logits.len() as f32;
+    let not_t = targets.mapv(|y| 1.0 - y);
+
+    let p = sigmoid(logits); // p
+    let q = p.mapv(|v| 1.0 - v); // 1 - p
+    let log_p = -softplus(&logits.mapv(|x| -x)); // log p
+    let log_q = -softplus(logits); // log(1 - p)
+
+    // per-class weights, alpha_t * (1 - p_t)^gamma
+    let w_pos = q.mapv(|v| alpha * v.powf(gamma)); // y = 1: α (1-p)^γ
+    let w_neg = p.mapv(|v| (1.0 - alpha) * v.powf(gamma)); // y = 0: (1-α) p^γ
+
+    // loss = -[ y · w_pos · log p + (1-y) · w_neg · log(1-p) ]
+    let loss = -(targets * (&w_pos * &log_p) + &(&not_t * &(&w_neg * &log_q))).sum() / n;
+
+    // dL/dx
+    // y = 1: α(1-p)^γ [ γ p log p − (1 − p) ]
+    // y = 0: (1-α)p^γ [ p − γ (1 − p) log(1 − p) ]
+    let g_pos = &w_pos * &(gamma * &(&p * &log_p) - &q);
+    let g_neg = &w_neg * &(&p - &(gamma * &(&q * &log_q)));
+    let grad = (targets * g_pos + &(&not_t * &g_neg)) / n;
+
+    (loss, grad)
+}
+
 pub fn mse_loss(logits: &ArrayRef2<f32>, targets: &ArrayRef2<f32>) -> (f32, Array2<f32>) {
     let diff = logits - targets;
     let n = logits.len() as f32;
@@ -371,7 +410,7 @@ pub fn gaussian_log_prob(
     let eps = 1e-8;
     let quadratic = (x - u).powi(2) / o.powi(2);
     let norm = 2. * o.map(|v: &f32| v.max(eps).ln());
-    let constant = (f32::consts::PI * 2.).ln();
+    let constant = (std::f32::consts::PI * 2.).ln();
 
     let dims: Array2<f32> = -0.5 * (quadratic + norm + constant);
 

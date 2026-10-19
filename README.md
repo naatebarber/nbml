@@ -39,7 +39,7 @@ for (x, y) in training_data {
 ```
 
 Losses in `nbml::f` all return `(loss, d_loss)` — the scalar you log and the gradient you feed
-straight back into `backward()`. See `f::mse_loss`, `f::bce_loss`, `f::cross_entropy_loss`, and
+straight back into `backward()`. See `f::mse_loss`, `f::bce_loss`, `f::cross_entropy_loss`, etc, and
 their `batch_*` counterparts for 3D (batched sequence) inputs.
 
 ## Architecture
@@ -62,6 +62,7 @@ their `batch_*` counterparts for 3D (batched sequence) inputs.
 - **`Attention`**: Core softmax attention primitive
 - **`SelfAttention`**: Multi-head self attention
 - **`CrossAttention`**: Multi-head cross attention
+- **`GATv2`**: Sparse v2 graph attention ([Brody et al., 2022](https://arxiv.org/abs/2105.14491))
 - **`LinearAttention`**: Linear self attention with recurrent matrix-valued state. Subquadratic alternative to softmax attention ([Katharopoulos et al., 2020](https://arxiv.org/abs/2006.16236))
 - **`GatedLinearAttention`**: Gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
 - **`DeltaNet`**: Linear attention with delta rule for error-corrected state updates ([Yang et al., 2024](https://arxiv.org/abs/2406.06484))
@@ -96,13 +97,6 @@ Thin wrappers that assemble primitives into a full model.
 
 - **`CausalLM<M>`**: Embedding → sequence model → LM head, with `train_step()` wiring up cross
   entropy. `M` is any type you implement `CausalSequenceModel` for (see the example below).
-
-### Utilities (`nbml::util`)
-
-- **`batch_with_mask`**: Pad a `Vec<Array2<f32>>` of variable-length sequences into a single
-  `(Array3<f32>, Array2<f32>)` batch + pad mask
-- **`Bench`**: MSE / NMSE / R² / Pearson r scoring helpers
-- **`plot`, `plot_pair`**: Quick plotly line plots for debugging training runs
 
 `nbml` also re-exports `ndarray`, `ndarray_rand`, and `ndarray_stats`, so you don't have to pin
 matching versions yourself: `use nbml::ndarray::Array3;`

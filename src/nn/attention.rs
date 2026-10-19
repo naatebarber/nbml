@@ -1,5 +1,3 @@
-use std::f32;
-
 use ndarray::{Array1, Array2, Array3, ArrayView2, Axis, concatenate, s, stack};
 use serde::{Deserialize, Serialize};
 
