@@ -63,6 +63,7 @@ their `batch_*` counterparts for 3D (batched sequence) inputs.
 - **`SelfAttention`**: Multi-head self attention
 - **`CrossAttention`**: Multi-head cross attention
 - **`GATv2`**: Sparse v2 graph attention ([Brody et al., 2022](https://arxiv.org/abs/2105.14491))
+- **`GATv2Transformer`**: Transformer block using sparse v2 graph attention.
 - **`LinearAttention`**: Linear self attention with recurrent matrix-valued state. Subquadratic alternative to softmax attention ([Katharopoulos et al., 2020](https://arxiv.org/abs/2006.16236))
 - **`GatedLinearAttention`**: Gated linear attention with matrix-valued state and outer-product gating ([Yang et al., 2024](https://proceedings.mlr.press/v235/yang24ab.html))
 - **`DeltaNet`**: Linear attention with delta rule for error-corrected state updates ([Yang et al., 2024](https://arxiv.org/abs/2406.06484))

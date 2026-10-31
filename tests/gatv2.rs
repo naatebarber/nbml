@@ -1,4 +1,5 @@
 use nbml::nn::GATv2;
+use nbml::optim::{AdamW, Optimizer, ToParams};
 use ndarray::{Array2, array};
 use ndarray_rand::RandomExt;
 use ndarray_rand::rand::{SeedableRng, rngs::StdRng};
@@ -95,4 +96,41 @@ fn grad_check_a() {
             );
         }
     }
+}
+
+#[test]
+fn messages_follow_edges() {
+    let (mut layer, x, index, _) = setup();
+    let y = layer.forward(x.clone(), &index, false);
+
+    // node 1 only sends to nodes 0 and 1
+    let mut x_p = x.clone();
+    x_p.row_mut(1).mapv_inplace(|v| v + 1.0);
+    let y_p = layer.forward(x_p, &index, false);
+
+    assert!(y.row(0) != y_p.row(0), "receiver of node 1 did not change");
+    assert!(y.row(1) != y_p.row(1), "receiver of node 1 did not change");
+    assert!(y.row(2) == y_p.row(2), "node 2 has no edge from node 1");
+    assert!(y.row(3) == y_p.row(3), "node 3 has no edge from node 1");
+}
+
+#[test]
+fn overfitting() {
+    let (_, x, index, y) = setup();
+    let mut layer = GATv2::new(3, 4, 2, 3);
+    let mut optim = AdamW::default().with(&mut layer);
+    optim.learning_rate = 1e-2;
+
+    let mut final_loss = f32::MAX;
+    for _ in 0..3000 {
+        let y_pred = layer.forward(x.clone(), &index, true);
+        final_loss = (&y_pred - &y).mapv(|v| v.powi(2)).mean().unwrap();
+        let d_loss = 2. * (&y_pred - &y) / (y_pred.len() as f32);
+
+        layer.backward(d_loss, &index);
+        optim.step(&mut layer);
+        layer.zero_grads();
+    }
+
+    assert!(final_loss < 0.01, "failed to overfit: loss = {final_loss}");
 }
