@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Array4, Axis, concatenate, s, stack};
+use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Axis, concatenate, s, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -296,6 +296,28 @@ impl GatedLinearAttention {
             .unwrap();
 
         d_x + d_x_forget
+    }
+
+    pub fn step(&self, x: &Array2<f32>, h: &mut Array3<f32>) -> Array2<f32> {
+        let qkv_pre = x.dot(&self.w_qkv) + &self.b_qkv;
+        let q: ArrayView2<f32> = qkv_pre.slice(ndarray::s![.., 0..self.d_head]);
+        let k: ArrayView2<f32> = qkv_pre.slice(ndarray::s![.., self.d_head..(2 * self.d_head)]);
+        let v: ArrayView2<f32> = qkv_pre.slice(ndarray::s![.., (2 * self.d_head)..]);
+
+        let forget_ab = f::sigmoid(&(x.dot(&self.w_forget) + &self.b_forget));
+        let forget_a = forget_ab.slice(ndarray::s![.., 0..self.d_head]);
+        let forget_b = forget_ab.slice(ndarray::s![.., self.d_head..]);
+
+        let forget = &forget_a.insert_axis(Axis(2)) * &forget_b.insert_axis(Axis(1));
+        *h = &(*h) * forget;
+
+        let update = &k.insert_axis(Axis(2)) * &v.insert_axis(Axis(1));
+        *h += &update;
+
+        let attn = (&(*h) * &q.insert_axis(Axis(2))).sum_axis(Axis(1));
+        let o = attn.dot(&self.w_o) + &self.b_o;
+
+        o
     }
 }
 

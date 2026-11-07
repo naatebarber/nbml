@@ -89,21 +89,27 @@ fn gated_delta_net_gradient_check() {
 
 #[test]
 fn forward_and_step_compute_same_value() {
-    let x = Array3::random((5, 10, 16), Uniform::new(0., 1.).unwrap());
+    // (batch, d_in, d_head, d_out): batch == d_head and batch == 1 are included on purpose,
+    // since broadcasting bugs between the batch and head axes only show up for some shapes.
+    for (batch_size, d_in, d_head, d_out) in [(5, 16, 32, 16), (8, 16, 8, 12), (1, 16, 32, 16)] {
+        let seq_len = 10;
+        let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(0., 1.).unwrap());
 
-    let mut gdn = GatedDeltaNet::new(16, 32, 16);
-    let y_forward = gdn.forward(x.clone(), false);
-    let y_forward = y_forward.slice(s![.., -1, ..]).to_owned();
+        let mut gdn = GatedDeltaNet::new(d_in, d_head, d_out);
+        let y_forward = gdn.forward(x.clone(), false);
 
-    let mut state = Array3::zeros((5, 32, 32));
-    let mut y_step = Array2::zeros((5, 16));
-    for t in 0..x.dim().1 {
-        let x_t = x.slice(s![.., t, ..]).to_owned();
-        y_step = gdn.step(&x_t, &mut state);
+        let mut state = Array3::zeros((batch_size, d_head, d_head));
+        for t in 0..seq_len {
+            let x_t = x.slice(s![.., t, ..]).to_owned();
+            let y_step: Array2<f32> = gdn.step(&x_t, &mut state);
+
+            let diff = (&y_forward.slice(s![.., t, ..]) - &y_step)
+                .abs()
+                .fold(0f32, |a, &v| a.max(v));
+            assert!(
+                diff < 1e-4,
+                "forward and step diverge at t={t} for (batch={batch_size}, d_in={d_in}, d_head={d_head}, d_out={d_out}): max diff {diff}"
+            );
+        }
     }
-
-    assert!(
-        y_forward == y_step,
-        "forward and step compute different values"
-    );
 }

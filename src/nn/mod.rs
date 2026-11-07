@@ -1,4 +1,5 @@
 pub mod attention;
+pub mod cfc;
 pub mod conv2d;
 pub mod delta_net;
 pub mod esn;
@@ -20,6 +21,7 @@ pub mod rnn;
 pub mod transformer;
 
 pub use attention::*;
+pub use cfc::*;
 pub use conv2d::*;
 pub use delta_net::*;
 pub use esn::*;

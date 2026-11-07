@@ -280,3 +280,34 @@ fn gated_linear_attention_associative_recall() {
         "linear self attention failed associative recall with loss {final_loss} > {max_loss}"
     );
 }
+
+#[test]
+fn gated_linear_attention_forward_and_step_compute_same_value() {
+    // (batch, d_in, d_head): batch == d_head and batch == 1 are included on purpose, since
+    // broadcasting bugs between the batch and head axes only show up for some shapes.
+    for (batch_size, d_in, d_head) in [(5, 16, 32), (8, 16, 8), (1, 16, 32)] {
+        let seq_len = 10;
+        let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(0., 1.).unwrap());
+
+        let mut attn = GatedLinearAttention::new(d_in, d_head);
+        let y_forward = attn.forward(x.clone(), false);
+
+        let mut state = Array3::zeros((batch_size, d_head, d_head));
+        for t in 0..seq_len {
+            let x_t = x.slice(s![.., t, ..]).to_owned();
+            let y_step: Array2<f32> = attn.step(&x_t, &mut state);
+
+            // relative tolerance: unnormalized states can grow, so scale by output magnitude
+            let scale = y_forward
+                .slice(s![.., t, ..])
+                .fold(1f32, |a, &v| a.max(v.abs()));
+            let diff = (&y_forward.slice(s![.., t, ..]) - &y_step)
+                .abs()
+                .fold(0f32, |a, &v| a.max(v));
+            assert!(
+                diff < 1e-4 * scale,
+                "forward and step diverge at t={t} for (batch={batch_size}, d_in={d_in}, d_head={d_head}): max diff {diff} (scale {scale})"
+            );
+        }
+    }
+}

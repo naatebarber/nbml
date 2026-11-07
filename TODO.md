@@ -1,0 +1,6 @@
+ - Add feature maps / normalization for LinearAttention
+ - Add SiLU before norm on qk for DeltaNet, Gated DeltaNet
+ - Add output norm / output gate for DeltaNet, Gated DeltaNet
+ - Add short convolutions on q,k,v for DeltaNet, Gated DeltaNet
+ - Value dimension gate / outer product gate in GLA was dropped for simplicity, can remove.
+ - All linear attention variants should be multi-headed. A later rewrite

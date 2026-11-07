@@ -53,6 +53,8 @@ pub struct GatedDeltaNet {
 
 impl GatedDeltaNet {
     pub fn new(d_in: usize, d_head: usize, d_out: usize) -> Self {
+        // initialize the forget gate open, so the network can learn what to forget.
+        // (start by remembering everything)
         Self {
             d_in,
             d_head,
@@ -61,7 +63,7 @@ impl GatedDeltaNet {
             w_qkv: f::xavier_normal((d_in, 3 * d_head)),
             b_qkv: Array1::zeros(3 * d_head),
             w_ab: f::xavier_normal((d_in, 2)),
-            b_ab: Array1::zeros(2),
+            b_ab: Array1::from_vec(vec![4., 0.]),
             w_o: f::xavier_normal((d_head, d_out)),
             b_o: Array1::zeros(d_out),
 

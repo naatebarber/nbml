@@ -1,4 +1,4 @@
-use ndarray::{Array1, Array2, Array3, Array4, Axis, s, stack};
+use ndarray::{Array1, Array2, Array3, Array4, ArrayView2, Axis, s, stack};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -326,6 +326,30 @@ impl DeltaNet {
             .unwrap();
 
         d_x
+    }
+
+    pub fn step(&self, x: &Array2<f32>, h: &mut Array3<f32>) -> Array2<f32> {
+        let qkv_pre = x.dot(&self.w_qkv) + &self.b_qkv;
+        let q: ArrayView2<f32> = qkv_pre.slice(ndarray::s![.., 0..self.d_head]);
+        let k: ArrayView2<f32> = qkv_pre.slice(ndarray::s![.., self.d_head..(2 * self.d_head)]);
+        let v: ArrayView2<f32> = qkv_pre.slice(ndarray::s![.., (2 * self.d_head)..]);
+
+        let q_norm = f::l2_norm(&q);
+        let k_norm = f::l2_norm(&k);
+
+        let beta_pre = x.dot(&self.w_beta) + &self.b_beta;
+        let beta = f::sigmoid(&beta_pre).insert_axis(Axis(2));
+
+        let r = (&(*h) * &k_norm.clone().insert_axis(Axis(2))).sum_axis(Axis(1));
+        let error = &v - &r;
+        let update = &k_norm.insert_axis(Axis(2)) * &error.insert_axis(Axis(1));
+
+        *h = &(*h) + &beta * &update;
+
+        let attn = (&(*h) * &q_norm.insert_axis(Axis(2))).sum_axis(Axis(1));
+        let o = attn.dot(&self.w_o) + &self.b_o;
+
+        o
     }
 }
 

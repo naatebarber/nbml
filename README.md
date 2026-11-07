@@ -52,6 +52,7 @@ their `batch_*` counterparts for 3D (batched sequence) inputs.
 - **`RNN`**: Vanilla recurrent neural network
 - **`LSTM`**: Long Short-Term Memory Network
 - **`GRU`**: Gated Recurrent Unit
+- **`CfC`**: Closed-form Continuous Neural Network; closed form approximation of LTC. ([Hasani et al. 2022](https://arxiv.org/abs/2106.13898))
 - **`ESN`**: Echo-state network, fixed recurrence + readout
 - **`LSM`**: Liquid state machine
 - **`RNNReservoir`**: RNN reservoir (used by ESN)
