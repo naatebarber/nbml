@@ -9,7 +9,7 @@ use crate::{
 // Closed-form Continuous-time neural network
 
 #[derive(Clone, Debug, Default)]
-pub struct CFCCache {
+pub struct CfCCache {
     pub x_2d: Array2<f32>,
     pub z_pre: Array3<f32>,
     pub z: Array3<f32>,
@@ -22,7 +22,7 @@ pub struct CFCCache {
 }
 
 #[derive(Clone, Debug, Default)]
-pub struct CFCGrads {
+pub struct CfCGrads {
     pub d_zx_w: Array2<f32>,
     pub d_zx_b: Array1<f32>,
     pub d_zh_w: Array2<f32>,
@@ -31,7 +31,7 @@ pub struct CFCGrads {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct CFC {
+pub struct CfC {
     pub d_in: usize,
     pub d_backbone: usize,
     pub d_model: usize,
@@ -43,12 +43,12 @@ pub struct CFC {
     pub fgc_b: Array1<f32>,
 
     #[serde(skip)]
-    pub cache: CFCCache,
+    pub cache: CfCCache,
     #[serde(skip)]
-    pub grads: CFCGrads,
+    pub grads: CfCGrads,
 }
 
-impl CFC {
+impl CfC {
     pub fn new(d_in: usize, d_backbone: usize, d_model: usize) -> Self {
         Self {
             d_in,
@@ -61,8 +61,8 @@ impl CFC {
             fgc_w: f::xavier_normal((d_backbone, 3 * d_model)),
             fgc_b: Array1::zeros(3 * d_model),
 
-            cache: CFCCache::default(),
-            grads: CFCGrads::default(),
+            cache: CfCCache::default(),
+            grads: CfCGrads::default(),
         }
     }
 
@@ -256,7 +256,7 @@ impl CFC {
     }
 }
 
-impl ToParams for CFC {
+impl ToParams for CfC {
     fn params(&mut self) -> Vec<crate::optim::Param> {
         vec![
             Param::new(&mut self.zx_w).with_grad(&mut self.grads.d_zx_w),

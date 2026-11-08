@@ -1,4 +1,4 @@
-use nbml::nn::CFC;
+use nbml::nn::CfC;
 use nbml::optim::{AdamW, Optimizer, ToParams};
 use ndarray::{Array2, Array3, Axis, s};
 use ndarray_rand::RandomExt;
@@ -9,10 +9,10 @@ const EPS: f32 = 5e-3;
 
 /// batch 2, seq 4, d_in 3, backbone 5, d_model 4. dt is strictly positive and varied
 /// so the time-constant path (g, tau_exp) actually contributes to the gradient.
-fn setup() -> (CFC, Array3<f32>, Array3<f32>, Array3<f32>) {
+fn setup() -> (CfC, Array3<f32>, Array3<f32>, Array3<f32>) {
     let mut rng = StdRng::seed_from_u64(0);
     let (b, s, d_in, d_backbone, d_model) = (2, 4, 3, 5, 4);
-    let mut layer = CFC::new(d_in, d_backbone, d_model);
+    let mut layer = CfC::new(d_in, d_backbone, d_model);
     // non-zero biases so their gradients aren't trivially checked at the origin
     layer.zx_b =
         ndarray::Array1::random_using(d_backbone, Normal::new(0f32, 0.5).unwrap(), &mut rng);
@@ -26,7 +26,7 @@ fn setup() -> (CFC, Array3<f32>, Array3<f32>, Array3<f32>) {
     (layer, x, dt, w)
 }
 
-fn loss(layer: &mut CFC, x: &Array3<f32>, dt: &Array3<f32>, w: &Array3<f32>) -> f32 {
+fn loss(layer: &mut CfC, x: &Array3<f32>, dt: &Array3<f32>, w: &Array3<f32>) -> f32 {
     let out = layer.forward(x.clone(), dt.clone(), false);
     (&out * w).sum()
 }
@@ -44,8 +44,8 @@ fn assert_close(name: &str, analytic: f32, numeric: f32) {
 /// flat mutable slice, `grad` returns the matching analytic gradient.
 fn check_param(
     name: &str,
-    param: impl Fn(&mut CFC) -> &mut [f32],
-    grad: impl Fn(&CFC) -> Vec<f32>,
+    param: impl Fn(&mut CfC) -> &mut [f32],
+    grad: impl Fn(&CfC) -> Vec<f32>,
 ) {
     let (mut layer, x, dt, w) = setup();
     layer.forward(x.clone(), dt.clone(), true);
@@ -253,11 +253,11 @@ fn overfitting() {
             .mapv_inplace(|v| v / (t + 1) as f32);
     }
 
-    let mut model = CFC::new(d, 16, d);
+    let mut model = CfC::new(d, 16, d);
     let mut optim = AdamW::default().with(&mut model);
     optim.learning_rate = 1e-2;
 
-    let mse = |model: &mut CFC| {
+    let mse = |model: &mut CfC| {
         let y_pred = model.forward(x.clone(), dt.clone(), false);
         (&y_pred - &y).powi(2).mean().unwrap()
     };
@@ -274,6 +274,6 @@ fn overfitting() {
     println!("initial={initial} final={final_loss}");
     assert!(
         final_loss < initial * 0.25,
-        "CFC didn't train: initial {initial} -> final {final_loss}"
+        "CfC didn't train: initial {initial} -> final {final_loss}"
     );
 }
