@@ -1,4 +1,4 @@
- - Add feature maps / normalization for LinearAttention
+ - [DONE] Add feature maps / normalization for LinearAttention
  - Add SiLU before norm on qk for DeltaNet, Gated DeltaNet
  - Add output norm / output gate for DeltaNet, Gated DeltaNet
  - Add short convolutions on q,k,v for DeltaNet, Gated DeltaNet

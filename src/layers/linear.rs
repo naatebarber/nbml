@@ -55,6 +55,11 @@ impl Linear {
             self.cache.x = x.clone();
         }
 
+        self.infer(&x)
+    }
+
+    /// Forward pass without caching, usable through a shared reference.
+    pub fn infer(&self, x: &Array2<f32>) -> Array2<f32> {
         x.dot(&self.w) + &self.b
     }
 

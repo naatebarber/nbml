@@ -1,6 +1,6 @@
 use nbml::{
     f,
-    nn::{GatedLinearAttention, LinearAttention},
+    nn::{FeatureMap, GatedLinearAttention, LinearAttention},
     optim::{AdamW, Optimizer, ToIntermediates, ToParams},
 };
 use ndarray::{Array1, Array2, Array3, s};
@@ -310,4 +310,142 @@ fn gated_linear_attention_forward_and_step_compute_same_value() {
             );
         }
     }
+}
+
+#[test]
+fn katharopoulos_linear_attention_gradient_check() {
+    let d_in = 4;
+    let d_head = 4;
+    let batch_size = 3;
+    let seq_len = 5;
+    let eps = 1e-3;
+
+    let mut attn = LinearAttention::katharopoulos(d_in, d_head);
+    // zero-mean inputs so the projections hit both branches of elu + 1
+    let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-1., 1.).unwrap());
+
+    let out = attn.forward(x.clone(), true);
+    // non-uniform upstream gradient: an all-ones d_loss hides errors in the normalizer gradient
+    let d_loss = Array3::random(out.dim(), Uniform::new(-1., 1.).unwrap());
+    let d_x = attn.backward(d_loss.clone());
+
+    for b in 0..batch_size {
+        for s in 0..seq_len {
+            for f in 0..d_in {
+                let mut x_plus = x.clone();
+                let mut x_minus = x.clone();
+                x_plus[[b, s, f]] += eps;
+                x_minus[[b, s, f]] -= eps;
+
+                let out_plus = attn.clone().forward(x_plus, false);
+                let out_minus = attn.clone().forward(x_minus, false);
+
+                let numerical = ((&out_plus - &out_minus) * &d_loss).sum() / (2.0 * eps);
+                let analytical = d_x[[b, s, f]];
+
+                let diff = (numerical - analytical).abs();
+                assert!(
+                    diff < 1e-2 * numerical.abs().max(1.),
+                    "gradient mismatch at [{b},{s},{f}]: numerical={numerical}, analytical={analytical}, diff={diff}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn katharopoulos_linear_attention_weight_gradient_check() {
+    let (d_in, d_head, batch_size, seq_len, eps) = (4, 4, 2, 4, 1e-2);
+
+    let mut attn = LinearAttention::katharopoulos(d_in, d_head);
+    let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-1., 1.).unwrap());
+
+    let out = attn.forward(x.clone(), true);
+    let d_loss = Array3::random(out.dim(), Uniform::new(-1., 1.).unwrap());
+    attn.backward(d_loss.clone());
+
+    for i in 0..d_in {
+        for j in 0..3 * d_head {
+            let mut plus = attn.clone();
+            let mut minus = attn.clone();
+            plus.w_qkv[[i, j]] += eps;
+            minus.w_qkv[[i, j]] -= eps;
+
+            let numerical = ((&plus.forward(x.clone(), false) - &minus.forward(x.clone(), false))
+                * &d_loss)
+                .sum()
+                / (2.0 * eps);
+            let analytical = attn.grads.d_w_qkv[[i, j]];
+
+            let diff = (numerical - analytical).abs();
+            assert!(
+                diff < 1e-2 * numerical.abs().max(1.),
+                "d_w_qkv mismatch at [{i},{j}]: numerical={numerical}, analytical={analytical}"
+            );
+        }
+    }
+}
+
+#[test]
+fn katharopoulos_forward_and_step_compute_same_value() {
+    for (batch_size, d_in, d_head) in [(5, 16, 32), (8, 16, 8), (1, 16, 32)] {
+        let seq_len = 10;
+        let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-1., 1.).unwrap());
+
+        let mut attn = LinearAttention::katharopoulos(d_in, d_head);
+        let y_forward = attn.forward(x.clone(), false);
+
+        let mut state = attn.new_state(batch_size);
+        assert_eq!(state.dim(), (batch_size, d_head, d_head + 1));
+
+        for t in 0..seq_len {
+            let x_t = x.slice(s![.., t, ..]).to_owned();
+            let y_step = attn.step(&x_t, &mut state);
+
+            let diff = (&y_forward.slice(s![.., t, ..]) - &y_step)
+                .abs()
+                .fold(0f32, |a, &v| a.max(v));
+            assert!(
+                diff < 1e-5,
+                "forward and step diverge at t={t}: max diff {diff}"
+            );
+        }
+    }
+}
+
+#[test]
+fn katharopoulos_output_is_convex_combination_of_values() {
+    // with a positive feature map and normalization, each output (before w_o) is a convex
+    // combination of past values, so it is bounded by the largest value norm seen so far.
+    let (d_in, d_head, batch_size, seq_len) = (8, 8, 4, 64);
+    let mut attn = LinearAttention::katharopoulos(d_in, d_head);
+    let x = Array3::random((batch_size, seq_len, d_in), Uniform::new(-1., 1.).unwrap());
+    attn.forward(x, true);
+
+    let attn_out = attn
+        .cache
+        .attn_2d
+        .clone()
+        .into_shape_clone((batch_size, seq_len, d_head))
+        .unwrap();
+    for b in 0..batch_size {
+        for j in 0..d_head {
+            for t in 0..seq_len {
+                let vs = attn.cache.v.slice(s![b, ..=t, j]);
+                let lo = vs.fold(f32::MAX, |a, &v| a.min(v));
+                let hi = vs.fold(f32::MIN, |a, &v| a.max(v));
+                let o = attn_out[[b, t, j]];
+                assert!(
+                    o >= lo - 1e-4 && o <= hi + 1e-4,
+                    "o={o} outside [{lo}, {hi}]"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[should_panic(expected = "strictly positive feature map")]
+fn normalization_requires_positive_feature_map() {
+    LinearAttention::new_with_feature_map(4, 4, FeatureMap::Identity, true);
 }

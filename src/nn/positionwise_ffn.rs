@@ -42,6 +42,12 @@ impl PositionwiseFFN {
         self.linear_2.forward(z, grad)
     }
 
+    /// Forward pass without caching, usable through a shared reference.
+    pub fn infer(&self, x: &Array2<f32>) -> Array2<f32> {
+        let x = self.linear_1.infer(x);
+        self.linear_2.infer(&f::relu(&x))
+    }
+
     pub fn backward(&mut self, d_loss: Array2<f32>) -> Array2<f32> {
         let d_loss = self.linear_2.backward(d_loss);
         let d_loss_dz = d_loss * f::d_relu(&self.cache.x1);

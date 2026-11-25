@@ -1,4 +1,4 @@
-use ndarray::Array3;
+use ndarray::{Array2, Array3};
 use serde::{Deserialize, Serialize};
 
 use crate::layers::LayerNorm;
@@ -9,6 +9,8 @@ pub trait LinearAttentionLike: ToParams + ToIntermediates {
     fn new(d_in: usize, d_head: usize) -> Self;
     fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32>;
     fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32>;
+    fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32>;
+    fn new_state(&self, batch_size: usize) -> Array3<f32>;
 }
 
 impl LinearAttentionLike for LinearAttention {
@@ -22,6 +24,14 @@ impl LinearAttentionLike for LinearAttention {
 
     fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
+    }
+
+    fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        LinearAttention::step(self, x, state)
+    }
+
+    fn new_state(&self, batch_size: usize) -> Array3<f32> {
+        LinearAttention::new_state(self, batch_size)
     }
 }
 
@@ -37,6 +47,14 @@ impl LinearAttentionLike for GatedLinearAttention {
     fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
     }
+
+    fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        GatedLinearAttention::step(self, x, state)
+    }
+
+    fn new_state(&self, batch_size: usize) -> Array3<f32> {
+        Array3::zeros((batch_size, self.d_head, self.d_head))
+    }
 }
 
 impl LinearAttentionLike for DeltaNet {
@@ -51,11 +69,19 @@ impl LinearAttentionLike for DeltaNet {
     fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
     }
+
+    fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        DeltaNet::step(self, x, state)
+    }
+
+    fn new_state(&self, batch_size: usize) -> Array3<f32> {
+        Array3::zeros((batch_size, self.d_head, self.d_head))
+    }
 }
 
 impl LinearAttentionLike for GatedDeltaNet {
     fn new(d_in: usize, d_head: usize) -> Self {
-        GatedDeltaNet::new(d_in, d_head, d_head)
+        GatedDeltaNet::new(d_in, d_head, d_in)
     }
 
     fn forward(&mut self, x: Array3<f32>, grad: bool) -> Array3<f32> {
@@ -64,6 +90,14 @@ impl LinearAttentionLike for GatedDeltaNet {
 
     fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
         self.backward(d_loss)
+    }
+
+    fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        GatedDeltaNet::step(self, x, state)
+    }
+
+    fn new_state(&self, batch_size: usize) -> Array3<f32> {
+        Array3::zeros((batch_size, self.d_head, self.d_head))
     }
 }
 
@@ -78,9 +112,13 @@ pub struct LinearTransformerBase<A: LinearAttentionLike> {
 
 impl<A: LinearAttentionLike> LinearTransformerBase<A> {
     pub fn new(d_in: usize, d_head: usize) -> Self {
+        Self::from_attn(d_in, A::new(d_in, d_head))
+    }
+
+    pub fn from_attn(d_in: usize, attn: A) -> Self {
         Self {
             d_in,
-            attn: A::new(d_in, d_head),
+            attn,
             norm_attn: LayerNorm::new(d_in),
             feed_forward: PositionwiseFFN::new(d_in, 4 * d_in, d_in),
             norm_feed_forward: LayerNorm::new(d_in),
@@ -106,6 +144,18 @@ impl<A: LinearAttentionLike> LinearTransformerBase<A> {
         let x = x + ff_x;
 
         x
+    }
+
+    pub fn new_state(&self, batch_size: usize) -> Array3<f32> {
+        self.attn.new_state(batch_size)
+    }
+
+    pub fn step(&self, x: &Array2<f32>, state: &mut Array3<f32>) -> Array2<f32> {
+        let norm_x = self.norm_attn.infer(x);
+        let x = x + &self.attn.step(&norm_x, state);
+
+        let norm_x = self.norm_feed_forward.infer(&x);
+        &x + &self.feed_forward.infer(&norm_x)
     }
 
     pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {

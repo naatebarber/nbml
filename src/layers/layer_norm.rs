@@ -44,14 +44,7 @@ impl LayerNorm {
             .into_shape_clone((batch_size * seq_len, feature_size))
             .unwrap();
 
-        let m = (1. / feature_size as f32) * x.sum_axis(Axis(1)).insert_axis(Axis(1));
-        let u = &x - &m;
-        let v = (1. / feature_size as f32)
-            * &(u.clone().powi(2)).sum_axis(Axis(1)).insert_axis(Axis(1));
-        let o = (&v + 1e-5).sqrt(); // (B * S, 1)
-
-        let x_h = &u / &o;
-        let y_2 = (&x_h * &self.gamma) + &self.beta;
+        let (y_2, o, x_h) = self.normalize(&x);
 
         if grad {
             self.cache.o = o;
@@ -60,6 +53,27 @@ impl LayerNorm {
 
         y_2.into_shape_clone((batch_size, seq_len, feature_size))
             .unwrap()
+    }
+
+    /// Forward pass on (N, D) without caching, usable through a shared reference.
+    pub fn infer(&self, x: &Array2<f32>) -> Array2<f32> {
+        self.normalize(x).0
+    }
+
+    /// Returns (output, std, x_hat) for a (N, D) input.
+    fn normalize(&self, x: &Array2<f32>) -> (Array2<f32>, Array2<f32>, Array2<f32>) {
+        let feature_size = x.dim().1;
+
+        let m = (1. / feature_size as f32) * x.sum_axis(Axis(1)).insert_axis(Axis(1));
+        let u = x - &m;
+        let v = (1. / feature_size as f32)
+            * &(u.clone().powi(2)).sum_axis(Axis(1)).insert_axis(Axis(1));
+        let o = (&v + 1e-5).sqrt(); // (N, 1)
+
+        let x_h = &u / &o;
+        let y = (&x_h * &self.gamma) + &self.beta;
+
+        (y, o, x_h)
     }
 
     pub fn backward(&mut self, d_loss: Array3<f32>) -> Array3<f32> {
